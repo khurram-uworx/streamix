@@ -4,6 +4,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>0.1.0</Version>
+    <Authors>Streamix Contributors</Authors>
+    <Company>Streamix</Company>
+    <Description>A lightweight, fluent, async-first streaming library for .NET.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/streamix/streamix</RepositoryUrl>
+    <PackageTags>stream;reactive;async;linq;backpressure</PackageTags>
   </PropertyGroup>
 
 </Project>
