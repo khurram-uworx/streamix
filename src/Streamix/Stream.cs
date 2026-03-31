@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Streamix.Abstractions;
 
 namespace Streamix;
@@ -90,10 +91,22 @@ public sealed class Stream<T> : IStream<T>
     public IStream<T> RunOn(TaskScheduler scheduler) => throw new NotImplementedException();
 
     /// <inheritdoc />
-    public Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            action(item);
+        }
+    }
 
     /// <inheritdoc />
-    public Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public async Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            await action(item);
+        }
+    }
 }
 
 /// <summary>
@@ -129,15 +142,16 @@ public static class Stream
 
 internal static class AsyncEnumerable
 {
-    public static async IAsyncEnumerable<T> Empty<T>()
+    public static async IAsyncEnumerable<T> Empty<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield break;
     }
 
-    public static async IAsyncEnumerable<int> Range(int start, int count)
+    public static async IAsyncEnumerable<int> Range(int start, int count, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         for (int i = 0; i < count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield return start + i;
         }
     }
