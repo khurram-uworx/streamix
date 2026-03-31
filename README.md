@@ -184,6 +184,7 @@ stream
 ## 🧭 Roadmap
 
 * [x] T01. Establish Solution and Project Skeleton
+* [x] T02. Define the Public API Contracts
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators

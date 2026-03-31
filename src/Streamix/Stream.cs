@@ -4,9 +4,10 @@ namespace Streamix;
 
 /// <summary>
 /// Default implementation of <see cref="IStream{T}"/>.
+/// This class is sealed to provide a stable API surface and ensure consistent behavior across operator chains.
 /// </summary>
 /// <typeparam name="T">The type of items in the stream.</typeparam>
-public class Stream<T> : IStream<T>
+public sealed class Stream<T> : IStream<T>
 {
     private readonly IAsyncEnumerable<T> _source;
 
@@ -20,6 +21,79 @@ public class Stream<T> : IStream<T>
     {
         return _source.GetAsyncEnumerator(cancellationToken);
     }
+
+    /// <inheritdoc />
+    public IStream<TResult> Map<TResult>(Func<T, TResult> selector) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<TResult> Select<TResult>(Func<T, TResult> selector) => Map(selector);
+
+    /// <inheritdoc />
+    public IStream<T> Filter(Func<T, bool> predicate) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Where(Func<T, bool> predicate) => Filter(predicate);
+
+    /// <inheritdoc />
+    public IStream<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<TResult> SelectMany<TResult>(Func<T, ISingle<TResult>> selector) => FlatMap(selector);
+
+    /// <inheritdoc />
+    public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Take(int count) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Skip(int count) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Merges multiple streams into one by combining their elements.
+    /// </summary>
+    public static IStream<T> Merge(params IStream<T>[] streams) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Combines elements from multiple streams using a specified function.
+    /// </summary>
+    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<IList<T>> Buffer(int count) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<IStream<T>> Window(int count) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Throttle(TimeSpan interval) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Delay(TimeSpan interval) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Retry(int retryCount = 1) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> Timeout(TimeSpan interval) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IConnectableStream<T> Publish() => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public IStream<T> RunOn(TaskScheduler scheduler) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    /// <inheritdoc />
+    public Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 }
 
 /// <summary>
@@ -36,6 +110,21 @@ public static class Stream
     /// Creates an empty stream.
     /// </summary>
     public static IStream<T> Empty<T>() => From(AsyncEnumerable.Empty<T>());
+
+    /// <summary>
+    /// Creates a stream that emits a range of sequential integers.
+    /// </summary>
+    public static IStream<int> Range(int start, int count) => From(AsyncEnumerable.Range(start, count));
+
+    /// <summary>
+    /// Merges multiple streams into one by combining their elements.
+    /// </summary>
+    public static IStream<T> Merge<T>(params IStream<T>[] streams) => Stream<T>.Merge(streams);
+
+    /// <summary>
+    /// Combines elements from multiple streams using a specified function.
+    /// </summary>
+    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector) => Stream<TResult>.Zip(first, second, resultSelector);
 }
 
 internal static class AsyncEnumerable
@@ -43,5 +132,13 @@ internal static class AsyncEnumerable
     public static async IAsyncEnumerable<T> Empty<T>()
     {
         yield break;
+    }
+
+    public static async IAsyncEnumerable<int> Range(int start, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            yield return start + i;
+        }
     }
 }
