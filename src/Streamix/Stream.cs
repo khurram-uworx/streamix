@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Streamix.Abstractions;
 
 namespace Streamix;
@@ -61,16 +62,132 @@ public sealed class Stream<T> : IStream<T>
     public IStream<T> Where(Func<T, bool> predicate) => Filter(predicate);
 
     /// <inheritdoc />
-    public IStream<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector) => throw new NotImplementedException();
+    public IStream<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector)
+    {
+        return Stream.From(FlatMapInternal(selector));
+    }
+
+    private async IAsyncEnumerable<TResult> FlatMapInternal<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
+            {
+                yield return innerItem;
+            }
+        }
+    }
 
     /// <inheritdoc />
-    public IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1) => throw new NotImplementedException();
+    public IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1)
+    {
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+        return Stream.From(FlatMapConcurrentInternal(selector, maxConcurrency));
+    }
+
+    private async IAsyncEnumerable<TResult> FlatMapConcurrentInternal<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (maxConcurrency == 1)
+        {
+            await foreach (var item in this.WithCancellation(cancellationToken))
+            {
+                yield return await selector(item);
+            }
+            yield break;
+        }
+
+        var channel = Channel.CreateUnbounded<TResult>();
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            var semaphore = new SemaphoreSlim(maxConcurrency);
+            var tasks = new List<Task>();
+            try
+            {
+                await foreach (var item in this.WithCancellation(cts.Token))
+                {
+                    await semaphore.WaitAsync(cts.Token);
+
+                    var task = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var result = await selector(item);
+                            await channel.Writer.WriteAsync(result, cts.Token);
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    }, cts.Token);
+
+                    tasks.Add(task);
+                    tasks.RemoveAll(t => t.IsCompleted);
+                }
+
+                await Task.WhenAll(tasks);
+                channel.Writer.Complete();
+            }
+            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+            finally
+            {
+                semaphore.Dispose();
+            }
+        }, cts.Token);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (channel.Reader.TryRead(out var result))
+                {
+                    yield return result;
+                }
+            }
+        }
+        finally
+        {
+            await cts.CancelAsync();
+        }
+
+        try
+        {
+            await producerTask;
+        }
+        catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+        {
+            // Expected when we cancel the producer task
+        }
+    }
 
     /// <inheritdoc />
     public IStream<TResult> SelectMany<TResult>(Func<T, ISingle<TResult>> selector) => FlatMap(selector);
 
     /// <inheritdoc />
-    public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector) => throw new NotImplementedException();
+    public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector)
+    {
+        return Stream.From(FlatMapManyInternal(selector));
+    }
+
+    private async IAsyncEnumerable<TResult> FlatMapManyInternal<TResult>(Func<T, IStream<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
+            {
+                yield return innerItem;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public IStream<T> Take(int count)
