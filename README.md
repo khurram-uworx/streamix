@@ -74,7 +74,7 @@ await stream
 ```
 
 * `maxConcurrency` controls simultaneous processing
-* Backpressure is automatic via bounded Channels
+* Backpressure is automatic via bounded Channels. When the consumer is slow, the producer is paused once the `maxConcurrency` buffer is full.
 
 ---
 
@@ -190,6 +190,7 @@ stream
 * [x] T05. Implement Fundamental Transformation Operators
 * [x] T06. Implement Flattening Semantics
 * [x] T07. Implement Aggregation and Combination Operators
+* [x] T08. Implement Concurrency and Backpressure
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators

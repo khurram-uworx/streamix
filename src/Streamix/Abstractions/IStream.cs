@@ -28,8 +28,9 @@ public interface IStream<T> : IAsyncEnumerable<T>
 
     /// <summary>
     /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream.
+    /// Supports concurrency control.
     /// </summary>
-    IStream<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector);
+    IStream<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector, int maxConcurrency = 1);
 
     /// <summary>
     /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream.
@@ -38,14 +39,15 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1);
 
     /// <summary>
-    /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream. Alias for <see cref="FlatMap{TResult}(Func{T, ISingle{TResult}})"/>.
+    /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream. Alias for <see cref="FlatMap{TResult}(Func{T, ISingle{TResult}}, int)"/>.
     /// </summary>
-    IStream<TResult> SelectMany<TResult>(Func<T, ISingle<TResult>> selector);
+    IStream<TResult> SelectMany<TResult>(Func<T, ISingle<TResult>> selector, int maxConcurrency = 1);
 
     /// <summary>
     /// Projects each element of a stream to an <see cref="IStream{TResult}"/> and flattens the resulting streams into one stream.
+    /// Supports concurrency control.
     /// </summary>
-    IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector);
+    IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency = 1);
 
     /// <summary>
     /// Returns a specified number of contiguous elements from the start of a stream.
