@@ -114,12 +114,102 @@ public sealed class Stream<T> : IStream<T>
     /// <summary>
     /// Merges multiple streams into one by combining their elements.
     /// </summary>
-    public static IStream<T> Merge(params IStream<T>[] streams) => throw new NotImplementedException();
+    public static IStream<T> Merge(params IStream<T>[] streams)
+    {
+        return Stream.From(MergeInternal(streams));
+    }
+
+    private static async IAsyncEnumerable<T> MergeInternal(IStream<T>[] streams, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (streams == null || streams.Length == 0) yield break;
+
+        var channel = System.Threading.Channels.Channel.CreateUnbounded<T>();
+        var tasks = new List<Task>();
+
+        foreach (var stream in streams)
+        {
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var item in stream.WithCancellation(cancellationToken))
+                    {
+                        await channel.Writer.WriteAsync(item, cancellationToken);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    channel.Writer.TryComplete(ex);
+                    throw;
+                }
+            }, cancellationToken));
+        }
+
+        _ = Task.WhenAll(tasks).ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+            {
+                channel.Writer.TryComplete(t.Exception?.InnerException);
+            }
+            else
+            {
+                channel.Writer.TryComplete();
+            }
+        }, cancellationToken);
+
+        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        {
+            while (channel.Reader.TryRead(out var item))
+            {
+                yield return item;
+            }
+        }
+
+        // Ensure any exception that completed the channel is rethrown
+        await channel.Reader.Completion;
+    }
 
     /// <summary>
     /// Combines elements from multiple streams using a specified function.
     /// </summary>
-    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector) => throw new NotImplementedException();
+    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector)
+    {
+        return Stream.From(ZipInternal(first, second, resultSelector));
+    }
+
+    private static async IAsyncEnumerable<TResult> ZipInternal<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var e1 = first.GetAsyncEnumerator(cancellationToken);
+        await using var e2 = second.GetAsyncEnumerator(cancellationToken);
+
+        while (true)
+        {
+            var t1 = e1.MoveNextAsync();
+            var t2 = e2.MoveNextAsync();
+
+            if (!await t1 || !await t2)
+            {
+                yield break;
+            }
+
+            yield return resultSelector(e1.Current, e2.Current);
+        }
+    }
+
+    /// <inheritdoc />
+    public IStream<T> MergeWith(params IStream<T>[] others)
+    {
+        var all = new IStream<T>[others.Length + 1];
+        all[0] = this;
+        others.CopyTo(all, 1);
+        return Merge(all);
+    }
+
+    /// <inheritdoc />
+    public IStream<TResult> ZipWith<TOther, TResult>(IStream<TOther> other, Func<T, TOther, TResult> resultSelector)
+    {
+        return Zip(this, other, resultSelector);
+    }
 
     /// <inheritdoc />
     public IStream<IList<T>> Buffer(int count) => throw new NotImplementedException();
