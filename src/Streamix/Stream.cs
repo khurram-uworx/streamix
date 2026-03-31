@@ -24,13 +24,38 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
-    public IStream<TResult> Map<TResult>(Func<T, TResult> selector) => throw new NotImplementedException();
+    public IStream<TResult> Map<TResult>(Func<T, TResult> selector)
+    {
+        return Stream.From(MapInternal(selector));
+    }
+
+    private async IAsyncEnumerable<TResult> MapInternal<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            yield return selector(item);
+        }
+    }
 
     /// <inheritdoc />
     public IStream<TResult> Select<TResult>(Func<T, TResult> selector) => Map(selector);
 
     /// <inheritdoc />
-    public IStream<T> Filter(Func<T, bool> predicate) => throw new NotImplementedException();
+    public IStream<T> Filter(Func<T, bool> predicate)
+    {
+        return Stream.From(FilterInternal(predicate));
+    }
+
+    private async IAsyncEnumerable<T> FilterInternal(Func<T, bool> predicate, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                yield return item;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public IStream<T> Where(Func<T, bool> predicate) => Filter(predicate);
@@ -48,10 +73,43 @@ public sealed class Stream<T> : IStream<T>
     public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector) => throw new NotImplementedException();
 
     /// <inheritdoc />
-    public IStream<T> Take(int count) => throw new NotImplementedException();
+    public IStream<T> Take(int count)
+    {
+        return Stream.From(TakeInternal(count));
+    }
+
+    private async IAsyncEnumerable<T> TakeInternal(int count, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (count <= 0) yield break;
+
+        int remaining = count;
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            yield return item;
+            if (--remaining == 0) break;
+        }
+    }
 
     /// <inheritdoc />
-    public IStream<T> Skip(int count) => throw new NotImplementedException();
+    public IStream<T> Skip(int count)
+    {
+        return Stream.From(SkipInternal(count));
+    }
+
+    private async IAsyncEnumerable<T> SkipInternal(int count, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        int remaining = count;
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            if (remaining > 0)
+            {
+                remaining--;
+                continue;
+            }
+
+            yield return item;
+        }
+    }
 
     /// <summary>
     /// Merges multiple streams into one by combining their elements.
