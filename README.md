@@ -189,6 +189,7 @@ stream
 * [x] T04. Implement Core Single Execution Model
 * [x] T05. Implement Fundamental Transformation Operators
 * [x] T06. Implement Flattening Semantics
+* [x] T07. Implement Aggregation and Combination Operators
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators

@@ -58,6 +58,16 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Skip(int count);
 
     /// <summary>
+    /// Merges this stream with other streams.
+    /// </summary>
+    IStream<T> MergeWith(params IStream<T>[] others);
+
+    /// <summary>
+    /// Zips this stream with another stream using a result selector.
+    /// </summary>
+    IStream<TResult> ZipWith<TOther, TResult>(IStream<TOther> other, Func<T, TOther, TResult> resultSelector);
+
+    /// <summary>
     /// Groups elements of a stream into buffers.
     /// </summary>
     IStream<IList<T>> Buffer(int count);
