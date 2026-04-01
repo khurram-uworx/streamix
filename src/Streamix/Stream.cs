@@ -512,7 +512,80 @@ public sealed class Stream<T> : IStream<T>
     public IStream<T> Timeout(TimeSpan interval) => throw new NotImplementedException();
 
     /// <inheritdoc />
-    public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler) => throw new NotImplementedException();
+    public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler)
+    {
+        return Stream.From(OnErrorResumeInternal(errorHandler));
+    }
+
+    private async IAsyncEnumerable<T> OnErrorResumeInternal(Func<Exception, IStream<T>> errorHandler, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        IAsyncEnumerator<T>? enumerator = null;
+        IStream<T>? resumeSource = null;
+        try
+        {
+            try
+            {
+                enumerator = _source.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                resumeSource = errorHandler(ex);
+            }
+
+            if (enumerator != null)
+            {
+                while (true)
+                {
+                    bool hasNext;
+                    try
+                    {
+                        hasNext = await enumerator.MoveNextAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        resumeSource = errorHandler(ex);
+                        break;
+                    }
+
+                    if (hasNext)
+                    {
+                        yield return enumerator.Current;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (enumerator != null)
+            {
+                await enumerator.DisposeAsync();
+            }
+        }
+
+        if (resumeSource != null)
+        {
+            await foreach (var item in resumeSource.WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public IStream<T> OnErrorReturn(T value)
+    {
+        return OnErrorResume(_ => Stream.From(value));
+    }
+
+    /// <inheritdoc />
+    public IStream<T> OnErrorMap(Func<Exception, Exception> mapper)
+    {
+        return OnErrorResume(ex => Stream.Error<T>(mapper(ex)));
+    }
 
     /// <inheritdoc />
     public IConnectableStream<T> Publish() => throw new NotImplementedException();
@@ -547,12 +620,31 @@ public static class Stream
     /// <summary>
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
-    public static IStream<T> From<T>(IAsyncEnumerable<T> source) => new Stream<T>(source);
+    public static IStream<T> From<T>(IAsyncEnumerable<T> source)
+    {
+        if (source is IStream<T> stream) return stream;
+        return new Stream<T>(source);
+    }
+
+    /// <summary>
+    /// Creates a stream from a <see cref="ISingle{T}"/>.
+    /// </summary>
+    public static IStream<T> From<T>(ISingle<T> source) => new Stream<T>(source);
+
+    /// <summary>
+    /// Creates a stream from a single value.
+    /// </summary>
+    public static IStream<T> From<T>(T value) => From(AsyncEnumerable.Just(value));
 
     /// <summary>
     /// Creates an empty stream.
     /// </summary>
     public static IStream<T> Empty<T>() => From(AsyncEnumerable.Empty<T>());
+
+    /// <summary>
+    /// Creates a stream that fails with the specified exception.
+    /// </summary>
+    public static IStream<T> Error<T>(Exception exception) => From(AsyncEnumerable.Error<T>(exception));
 
     /// <summary>
     /// Creates a stream that emits a range of sequential integers.
@@ -574,6 +666,17 @@ internal static class AsyncEnumerable
 {
     public static async IAsyncEnumerable<T> Empty<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        yield break;
+    }
+
+    public static async IAsyncEnumerable<T> Just<T>(T value, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        yield return value;
+    }
+
+    public static async IAsyncEnumerable<T> Error<T>(Exception exception, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        throw exception;
         yield break;
     }
 

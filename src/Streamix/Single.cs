@@ -80,6 +80,18 @@ public sealed class Single<T> : ISingle<T>
         return new Single<T>(OnErrorResumeInternal(errorHandler));
     }
 
+    /// <inheritdoc />
+    public ISingle<T> OnErrorReturn(T value)
+    {
+        return OnErrorResume(_ => Single.From(value));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> OnErrorMap(Func<Exception, Exception> mapper)
+    {
+        return OnErrorResume(ex => Single.Error<T>(mapper(ex)));
+    }
+
     private async IAsyncEnumerable<T> OnErrorResumeInternal(Func<Exception, ISingle<T>> errorHandler, [EnumeratorCancellation] CancellationToken ct = default)
     {
         IAsyncEnumerator<T>? enumerator = null;
