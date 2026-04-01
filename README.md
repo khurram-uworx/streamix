@@ -209,23 +209,6 @@ stream
 
 ## 🧭 Roadmap
 
-* [x] T01. Establish Solution and Project Skeleton
-* [x] T02. Define the Public API Contracts
-* [x] T03. Implement Core Stream Execution Model
-* [x] T04. Implement Core Single Execution Model
-* [x] T05. Implement Fundamental Transformation Operators
-* [x] T06. Implement Flattening Semantics
-* [x] T07. Implement Aggregation and Combination Operators
-* [x] T08. Implement Concurrency and Backpressure
-* [x] T09. Implement Buffer and Window Operators
-* [x] T10. Implement Time-Based and Resilience Operators
-* [x] T11. Implement Error Recovery APIs
-* [x] T12. Implement Hot Stream Support
-* [x] T13. Implement Interop with `IAsyncEnumerable<T>` and AsyncRx.NET
-* [x] T14. Implement Scheduler / Execution Control
-* [x] T15. Add Documentation Examples as Executable Tests
-* [x] T16. Package Quality, Diagnostics, and Developer Experience
-* [x] T17. Performance and Resource-Safety Validation
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators

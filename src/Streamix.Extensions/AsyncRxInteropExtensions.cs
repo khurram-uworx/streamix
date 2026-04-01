@@ -3,7 +3,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 
-namespace Streamix;
+namespace Streamix.Extensions;
 
 /// <summary>
 /// Provides extension methods for interoperability between Streamix and AsyncRx.NET.
