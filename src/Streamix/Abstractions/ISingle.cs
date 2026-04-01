@@ -42,7 +42,8 @@ public interface ISingle<T> : IAsyncEnumerable<T>
     ISingle<T> OnErrorMap(Func<Exception, Exception> mapper);
 
     /// <summary>
-    /// Executes the single-item stream on the specified scheduler.
+    /// Executes upstream operations (including source enumeration) on the specified scheduler.
+    /// This is equivalent to SubscribeOn in other reactive libraries.
     /// </summary>
     ISingle<T> RunOn(TaskScheduler scheduler);
 

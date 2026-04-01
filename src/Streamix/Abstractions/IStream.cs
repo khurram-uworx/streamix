@@ -120,7 +120,8 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IConnectableStream<T> Publish();
 
     /// <summary>
-    /// Executes the stream on the specified scheduler.
+    /// Executes upstream operations (including source enumeration) on the specified scheduler.
+    /// This is equivalent to SubscribeOn in other reactive libraries.
     /// </summary>
     IStream<T> RunOn(TaskScheduler scheduler);
 

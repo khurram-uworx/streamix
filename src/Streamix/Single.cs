@@ -90,23 +90,27 @@ public sealed class Single<T> : ISingle<T>
         }
     }
 
-    async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, Func<CancellationToken, IAsyncEnumerator<T>> enumeratorFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var enumerator = await Task.Factory.StartNew(() => enumeratorFactory(ct), ct, TaskCreationOptions.None, scheduler);
+        var enumerator = await Task.Factory.StartNew(() => source.GetAsyncEnumerator(cancellationToken), cancellationToken, TaskCreationOptions.None, scheduler);
         try
         {
             while (true)
             {
-                var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), ct, TaskCreationOptions.None, scheduler).Unwrap();
+                var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
                 if (hasNext)
+                {
                     yield return enumerator.Current;
+                }
                 else
-                    yield break;
+                {
+                    break;
+                }
             }
         }
         finally
         {
-            await Task.Factory.StartNew(() => enumerator.DisposeAsync().AsTask(), ct, TaskCreationOptions.None, scheduler).Unwrap();
+            await Task.Factory.StartNew(() => enumerator.DisposeAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
         }
     }
 
@@ -230,7 +234,7 @@ public sealed class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<T> RunOn(TaskScheduler scheduler)
     {
-        return new Single<T>(runOn(scheduler, ct => source.GetAsyncEnumerator(ct)));
+        return new Single<T>(runOn(scheduler), clock);
     }
 
     /// <inheritdoc />

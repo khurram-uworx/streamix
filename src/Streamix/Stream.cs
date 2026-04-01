@@ -571,6 +571,30 @@ public sealed class Stream<T> : IStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var enumerator = await Task.Factory.StartNew(() => source.GetAsyncEnumerator(cancellationToken), cancellationToken, TaskCreationOptions.None, scheduler);
+        try
+        {
+            while (true)
+            {
+                var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
+                if (hasNext)
+                {
+                    yield return enumerator.Current;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            await Task.Factory.StartNew(() => enumerator.DisposeAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
+        }
+    }
+
     internal IClock Clock => clock;
 
     /// <inheritdoc />
@@ -728,7 +752,10 @@ public sealed class Stream<T> : IStream<T>
     public IConnectableStream<T> Publish() => new Streamix.Operators.ConnectableStream<T>(this);
 
     /// <inheritdoc />
-    public IStream<T> RunOn(TaskScheduler scheduler) => throw new NotImplementedException();
+    public IStream<T> RunOn(TaskScheduler scheduler)
+    {
+        return Stream.From(runOn(scheduler), clock);
+    }
 
     /// <inheritdoc />
     public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)

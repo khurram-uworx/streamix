@@ -195,6 +195,7 @@ stream
 * [x] T10. Implement Time-Based and Resilience Operators
 * [x] T11. Implement Error Recovery APIs
 * [x] T12. Implement Hot Stream Support
+* [x] T14. Implement Scheduler / Execution Control
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators
