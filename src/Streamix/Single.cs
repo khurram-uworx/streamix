@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Streamix.Abstractions;
+using Streamix.Concurrency;
 
 namespace Streamix;
 
@@ -11,11 +12,15 @@ namespace Streamix;
 public sealed class Single<T> : ISingle<T>
 {
     private readonly IAsyncEnumerable<T> _source;
+    private readonly IClock _clock;
 
-    internal Single(IAsyncEnumerable<T> source)
+    internal Single(IAsyncEnumerable<T> source, IClock? clock = null)
     {
         _source = source;
+        _clock = clock ?? SystemClock.Instance;
     }
+
+    internal IClock Clock => _clock;
 
     /// <inheritdoc />
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -195,6 +200,93 @@ public sealed class Single<T> : ISingle<T>
         }
         return default!;
     }
+
+    /// <inheritdoc />
+    public ISingle<T> Retry(int retryCount = 1)
+    {
+        return Single.From(RetryInternal(retryCount), _clock);
+    }
+
+    private async IAsyncEnumerable<T> RetryInternal(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        int attempts = 0;
+        while (true)
+        {
+            bool failed = false;
+            IAsyncEnumerator<T>? enumerator = null;
+            try
+            {
+                enumerator = _source.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception)
+            {
+                if (attempts >= retryCount) throw;
+                attempts++;
+                continue;
+            }
+
+            await using (enumerator)
+            {
+                while (true)
+                {
+                    T current = default!;
+                    bool hasNext;
+                    try
+                    {
+                        hasNext = await enumerator.MoveNextAsync();
+                        if (hasNext) current = enumerator.Current;
+                    }
+                    catch (Exception)
+                    {
+                        if (attempts >= retryCount) throw;
+                        attempts++;
+                        failed = true;
+                        break;
+                    }
+
+                    if (hasNext)
+                    {
+                        yield return current;
+                        yield break; // Single should only emit one item
+                    }
+                    else
+                    {
+                        yield break;
+                    }
+                }
+            }
+
+            if (!failed) yield break;
+        }
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Timeout(TimeSpan interval)
+    {
+        return Single.From(TimeoutInternal(interval), _clock);
+    }
+
+    private async IAsyncEnumerable<T> TimeoutInternal(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var enumerator = this.GetAsyncEnumerator(cancellationToken);
+
+        var moveNextTask = enumerator.MoveNextAsync().AsTask();
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var timeoutTask = _clock.Delay(interval, timeoutCts.Token);
+
+        var completedTask = await Task.WhenAny(moveNextTask, timeoutTask);
+        await timeoutCts.CancelAsync();
+
+        if (completedTask == timeoutTask)
+        {
+            throw new TimeoutException($"The operation has timed out after {interval}.");
+        }
+
+        if (await moveNextTask)
+        {
+            yield return enumerator.Current;
+        }
+    }
 }
 
 /// <summary>
@@ -206,6 +298,11 @@ public static class Single
     /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
     public static ISingle<T> From<T>(IAsyncEnumerable<T> source) => new Single<T>(source);
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/> with a specific clock.
+    /// </summary>
+    internal static ISingle<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Single<T>(source, clock);
 
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a single value.

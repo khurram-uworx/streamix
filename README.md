@@ -192,6 +192,7 @@ stream
 * [x] T07. Implement Aggregation and Combination Operators
 * [x] T08. Implement Concurrency and Backpressure
 * [x] T09. Implement Buffer and Window Operators
+* [x] T10. Implement Time-Based and Resilience Operators
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators

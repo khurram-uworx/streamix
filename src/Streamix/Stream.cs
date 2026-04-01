@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Streamix.Abstractions;
+using Streamix.Concurrency;
 
 namespace Streamix;
 
@@ -12,11 +13,15 @@ namespace Streamix;
 public sealed class Stream<T> : IStream<T>
 {
     private readonly IAsyncEnumerable<T> _source;
+    private readonly IClock _clock;
 
-    internal Stream(IAsyncEnumerable<T> source)
+    internal Stream(IAsyncEnumerable<T> source, IClock? clock = null)
     {
         _source = source;
+        _clock = clock ?? SystemClock.Instance;
     }
+
+    internal IClock Clock => _clock;
 
     /// <inheritdoc />
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -500,16 +505,133 @@ public sealed class Stream<T> : IStream<T>
 
 
     /// <inheritdoc />
-    public IStream<T> Throttle(TimeSpan interval) => throw new NotImplementedException();
+    public IStream<T> Throttle(TimeSpan interval)
+    {
+        return Stream.From(ThrottleInternal(interval), _clock);
+    }
+
+    private async IAsyncEnumerable<T> ThrottleInternal(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset? nextAllowedEmission = null;
+
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            var now = _clock.Now;
+            if (nextAllowedEmission == null || now >= nextAllowedEmission.Value)
+            {
+                yield return item;
+                nextAllowedEmission = now + interval;
+            }
+        }
+    }
 
     /// <inheritdoc />
-    public IStream<T> Delay(TimeSpan interval) => throw new NotImplementedException();
+    public IStream<T> Delay(TimeSpan interval)
+    {
+        return Stream.From<T>(DelayInternal(interval), _clock);
+    }
+
+    private async IAsyncEnumerable<T> DelayInternal(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            await _clock.Delay(interval, cancellationToken);
+            yield return item;
+        }
+    }
 
     /// <inheritdoc />
-    public IStream<T> Retry(int retryCount = 1) => throw new NotImplementedException();
+    public IStream<T> Retry(int retryCount = 1)
+    {
+        return Stream.From(RetryInternal(retryCount), _clock);
+    }
+
+    private async IAsyncEnumerable<T> RetryInternal(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        int attempts = 0;
+        while (true)
+        {
+            bool failed = false;
+            IAsyncEnumerator<T>? enumerator = null;
+            try
+            {
+                enumerator = _source.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception)
+            {
+                if (attempts >= retryCount) throw;
+                attempts++;
+                continue;
+            }
+
+            await using (enumerator)
+            {
+                while (true)
+                {
+                    T current = default!;
+                    bool hasNext;
+                    try
+                    {
+                        hasNext = await enumerator.MoveNextAsync();
+                        if (hasNext) current = enumerator.Current;
+                    }
+                    catch (Exception)
+                    {
+                        if (attempts >= retryCount) throw;
+                        attempts++;
+                        failed = true;
+                        break;
+                    }
+
+                    if (hasNext)
+                    {
+                        yield return current;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (!failed) yield break;
+        }
+    }
 
     /// <inheritdoc />
-    public IStream<T> Timeout(TimeSpan interval) => throw new NotImplementedException();
+    public IStream<T> Timeout(TimeSpan interval)
+    {
+        return Stream.From(TimeoutInternal(interval), _clock);
+    }
+
+    private async IAsyncEnumerable<T> TimeoutInternal(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var enumerator = this.GetAsyncEnumerator(cancellationToken);
+
+        while (true)
+        {
+            var moveNextTask = enumerator.MoveNextAsync().AsTask();
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var timeoutTask = _clock.Delay(interval, timeoutCts.Token);
+
+            var completedTask = await Task.WhenAny(moveNextTask, timeoutTask);
+            await timeoutCts.CancelAsync();
+
+            if (completedTask == timeoutTask)
+            {
+                throw new TimeoutException($"The operation has timed out after {interval}.");
+            }
+
+            if (await moveNextTask)
+            {
+                yield return enumerator.Current;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler) => throw new NotImplementedException();
@@ -548,6 +670,11 @@ public static class Stream
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
     public static IStream<T> From<T>(IAsyncEnumerable<T> source) => new Stream<T>(source);
+
+    /// <summary>
+    /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/> with a specific clock.
+    /// </summary>
+    internal static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
 
     /// <summary>
     /// Creates an empty stream.

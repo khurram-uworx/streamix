@@ -13,4 +13,8 @@
     <PackageTags>stream;reactive;async;linq;backpressure</PackageTags>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Streamix.Tests" />
+  </ItemGroup>
+
 </Project>
