@@ -55,9 +55,9 @@ await Stream.Range(1, 10)
 
 ```csharp
 var orders =
-    GetUser(id)                       // Single<User>
-    .FlatMap(user => GetOrders(user)) // Stream<Order>
-    .FlatMapMany(o => Stream.From(o)); 
+    GetUser(id)                           // Single<User>
+    .FlatMapMany(user => GetOrders(user)) // Stream<Order>
+    .Map(o => o.Product);                 // Stream<string>
 ```
 
 * `FlatMap` → like `SelectMany`
@@ -106,12 +106,16 @@ var hot  = cold.Publish().RefCount(); // shared hot stream
 ### From AsyncRx.NET
 
 ```csharp
-Stream<int> stream = Stream.From(asyncObservable);
+using Streamix.Extensions;
+
+IStream<int> stream = asyncObservable.ToStream();
 ```
 
 ### To AsyncRx.NET
 
 ```csharp
+using Streamix.Extensions;
+
 IAsyncObservable<int> obs = stream.ToAsyncObservable();
 ```
 
@@ -197,6 +201,7 @@ stream
 * [x] T12. Implement Hot Stream Support
 * [x] T13. Implement Interop with `IAsyncEnumerable<T>` and AsyncRx.NET
 * [x] T14. Implement Scheduler / Execution Control
+* [x] T15. Add Documentation Examples as Executable Tests
 * Structured concurrency support
 * ASP.NET Core integration for reactive endpoints
 * Additional time-based operators
