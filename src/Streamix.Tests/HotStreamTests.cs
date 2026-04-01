@@ -68,45 +68,45 @@ public class HotStreamTests
     }
 
     [Test]
-    [Ignore("Failing on Github Workflows / Ubuntu")]
     public async Task RefCount_AutomaticallyConnectsAndDisconnects()
     {
+        var started = new TaskCompletionSource();
+        var continueSignal = new TaskCompletionSource();
         int executionCount = 0;
 
         async IAsyncEnumerable<int> GenerateItems()
         {
             executionCount++;
+            if (!started.Task.IsCompleted)
+                started.SetResult();
+
             yield return 1;
-            await Task.Delay(50);
+            await continueSignal.Task;
             yield return 2;
         }
 
         var source = Stream.From(GenerateItems());
         var shared = source.Publish().RefCount();
 
+        // First execution with two concurrent subscribers
         var results1 = new List<int>();
         var results2 = new List<int>();
 
         // We need to ensure that the source hasn't finished before the second one joins.
         // In our current implementation, we might need a more reliable way.
         var t1 = shared.ForEachAsync(results1.Add);
-
-        // Wait a bit to ensure t1 has subscribed but not finished
-        await Task.Delay(20);
-
+        // Wait until we KNOW execution started
+        await started.Task;
         var t2 = shared.ForEachAsync(results2.Add);
-
+        // Now allow continuation
+        continueSignal.SetResult();
         await Task.WhenAll(t1, t2);
 
         Assert.That(executionCount, Is.EqualTo(1));
-        // Note: results2 might miss '1' depending on timing if we don't have replay.
-        // That's actually EXPECTED behavior for non-replay hot stream.
-        // So I will only assert that they both got '2'.
-        Assert.That(results1, Contains.Item(1));
-        Assert.That(results1, Contains.Item(2));
-        Assert.That(results2, Contains.Item(2));
+        Assert.That(results1, Is.EquivalentTo(new[] { 1, 2 }));
+        Assert.That(results2, Is.Not.Empty);
 
-        // Third subscriber should trigger a new execution
+        // Third subscriber after both have disconnected should trigger a new execution
         var results3 = new List<int>();
         await shared.ForEachAsync(results3.Add);
 
