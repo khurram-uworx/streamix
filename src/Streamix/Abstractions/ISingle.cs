@@ -32,6 +32,16 @@ public interface ISingle<T> : IAsyncEnumerable<T>
     ISingle<T> OnErrorResume(Func<Exception, ISingle<T>> errorHandler);
 
     /// <summary>
+    /// Resumes a single-item stream with a single value if an error occurs.
+    /// </summary>
+    ISingle<T> OnErrorReturn(T value);
+
+    /// <summary>
+    /// Maps the error into another exception.
+    /// </summary>
+    ISingle<T> OnErrorMap(Func<Exception, Exception> mapper);
+
+    /// <summary>
     /// Executes the single-item stream on the specified scheduler.
     /// </summary>
     ISingle<T> RunOn(TaskScheduler scheduler);
@@ -50,4 +60,14 @@ public interface ISingle<T> : IAsyncEnumerable<T>
     /// Converts the single-item stream to a <see cref="Task{T}"/>.
     /// </summary>
     Task<T> ToTask(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retries a single-item stream if it fails.
+    /// </summary>
+    ISingle<T> Retry(int retryCount = 1);
+
+    /// <summary>
+    /// Terminates a single-item stream with an error if it doesn't emit an element within a specified time interval.
+    /// </summary>
+    ISingle<T> Timeout(TimeSpan interval);
 }
