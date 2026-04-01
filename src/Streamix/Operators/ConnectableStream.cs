@@ -1,3 +1,4 @@
+using Streamix.Abstractions;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -9,7 +10,7 @@ namespace Streamix.Operators;
 /// This class is internal as it's intended to be created via the <see cref="Stream{T}.Publish"/> method.
 /// </summary>
 /// <typeparam name="T">The type of items in the stream.</typeparam>
-internal sealed class ConnectableStream<T> : IConnectableStream<T>
+sealed class ConnectableStream<T> : IConnectableStream<T>
 {
     class ConnectionDisposable : IDisposable
     {
@@ -19,9 +20,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref disposed, 1) == 0)
-            {
                 stream.disconnect();
-            }
         }
     }
 
@@ -66,25 +65,19 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
 
             var finalSubscribers = subscribers.Values.ToArray();
             foreach (var subscriber in finalSubscribers)
-            {
                 subscriber.Writer.TryComplete();
-            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             var finalSubscribers = subscribers.Values.ToArray();
             foreach (var subscriber in finalSubscribers)
-            {
                 subscriber.Writer.TryComplete();
-            }
         }
         catch (Exception ex)
         {
             var finalSubscribers = subscribers.Values.ToArray();
             foreach (var subscriber in finalSubscribers)
-            {
                 subscriber.Writer.TryComplete(ex);
-            }
         }
         finally
         {
@@ -100,9 +93,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
     async IAsyncEnumerable<TResult> map<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             yield return selector(item);
-        }
     }
 
     async IAsyncEnumerable<T> filter(Func<T, bool> predicate, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -110,26 +101,20 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
             if (predicate(item))
-            {
                 yield return item;
-            }
         }
     }
 
     async IAsyncEnumerable<TResult> flatMap<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
-            {
                 yield return innerItem;
-            }
-        }
     }
 
     async IAsyncEnumerable<TResult> flatMapManyConcurrent<TResult>(Func<T, ISingle<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var semaphore = new System.Threading.SemaphoreSlim(maxConcurrency);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var tasks = new List<Task<List<TResult>>>();
 
@@ -144,12 +129,8 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
 
             var results = await Task.WhenAll(tasks);
             foreach (var list in results)
-            {
                 foreach (var result in list)
-                {
                     yield return result;
-                }
-            }
         }
         finally
         {
@@ -157,15 +138,13 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
-    async Task<List<TResult>> processItemAsync<TResult>(T item, Func<T, ISingle<TResult>> selector, System.Threading.SemaphoreSlim semaphore, CancellationToken cancellationToken)
+    async Task<List<TResult>> processItemAsync<TResult>(T item, Func<T, ISingle<TResult>> selector, SemaphoreSlim semaphore, CancellationToken cancellationToken)
     {
         try
         {
             var results = new List<TResult>();
             await foreach (var result in selector(item).WithCancellation(cancellationToken))
-            {
                 results.Add(result);
-            }
             return results;
         }
         finally
@@ -186,29 +165,24 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                 refCounter++;
                 incremented = true;
                 if (refCounter == 1)
-                {
                     autoConnection = Connect();
-                }
                 enumerator = this.GetAsyncEnumerator(cancellationToken);
             }
 
             while (await enumerator.MoveNextAsync())
-            {
                 yield return enumerator.Current;
-            }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
 
             if (incremented)
             {
                 lock (_lock)
                 {
                     refCounter--;
+
                     if (refCounter == 0)
                     {
                         autoConnection?.Dispose();
@@ -224,13 +198,11 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         if (maxConcurrency == 1)
         {
             await foreach (var item in this.WithCancellation(cancellationToken))
-            {
                 yield return await selector(item);
-            }
         }
         else
         {
-            var semaphore = new System.Threading.SemaphoreSlim(maxConcurrency);
+            var semaphore = new SemaphoreSlim(maxConcurrency);
             var tasks = new List<Task<TResult>>();
 
             try
@@ -243,9 +215,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
 
                 var results = await Task.WhenAll(tasks);
                 foreach (var result in results)
-                {
                     yield return result;
-                }
             }
             finally
             {
@@ -254,7 +224,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
-    async Task<TResult> executeSelectorAsync<TResult>(T item, Func<T, Task<TResult>> selector, System.Threading.SemaphoreSlim semaphore, CancellationToken cancellationToken)
+    async Task<TResult> executeSelectorAsync<TResult>(T item, Func<T, Task<TResult>> selector, SemaphoreSlim semaphore, CancellationToken cancellationToken)
     {
         try
         {
@@ -271,15 +241,13 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
             await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
-            {
                 yield return innerItem;
-            }
         }
     }
 
     async IAsyncEnumerable<TResult> flatMapManyConcurrentMany<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var semaphore = new System.Threading.SemaphoreSlim(maxConcurrency);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var tasks = new List<Task<List<TResult>>>();
 
@@ -294,12 +262,8 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
 
             var results = await Task.WhenAll(tasks);
             foreach (var list in results)
-            {
                 foreach (var result in list)
-                {
                     yield return result;
-                }
-            }
         }
         finally
         {
@@ -307,15 +271,13 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
-    async Task<List<TResult>> processItemManyAsync<TResult>(T item, Func<T, IStream<TResult>> selector, System.Threading.SemaphoreSlim semaphore, CancellationToken cancellationToken)
+    async Task<List<TResult>> processItemManyAsync<TResult>(T item, Func<T, IStream<TResult>> selector, SemaphoreSlim semaphore, CancellationToken cancellationToken)
     {
         try
         {
             var results = new List<TResult>();
             await foreach (var result in selector(item).WithCancellation(cancellationToken))
-            {
                 results.Add(result);
-            }
             return results;
         }
         finally
@@ -356,12 +318,8 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         Array.Copy(others, 0, streams, 1, others.Length);
 
         foreach (var stream in streams)
-        {
             await foreach (var item in stream.WithCancellation(cancellationToken))
-            {
                 yield return item;
-            }
-        }
     }
 
     async IAsyncEnumerable<TResult> zipWith<TOther, TResult>(IStream<TOther> other, Func<T, TOther, TResult> resultSelector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -372,9 +330,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         try
         {
             while (await enumerator1.MoveNextAsync() && await enumerator2.MoveNextAsync())
-            {
                 yield return resultSelector(enumerator1.Current, enumerator2.Current);
-            }
         }
         finally
         {
@@ -395,10 +351,9 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                 buffer = new List<T>();
             }
         }
+
         if (buffer.Count > 0)
-        {
             yield return buffer;
-        }
     }
 
     async IAsyncEnumerable<IStream<T>> window(int count, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -422,10 +377,10 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         {
             var now = DateTime.UtcNow;
             var timeSinceLastEmit = now - lastEmit;
+
             if (timeSinceLastEmit < interval)
-            {
                 await Task.Delay(interval - timeSinceLastEmit, cancellationToken);
-            }
+
             yield return item;
             lastEmit = DateTime.UtcNow;
         }
@@ -480,19 +435,14 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                         }
 
                         if (hasNext)
-                        {
                             yield return current;
-                        }
                         else
-                        {
                             break;
-                        }
                     }
                 }
             }
             finally
-            {
-            }
+            { }
 
             if (!failed) yield break;
         }
@@ -514,18 +464,12 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                 await timeoutCts.CancelAsync();
 
                 if (completedTask == timeoutTask)
-                {
                     throw new TimeoutException($"The operation has timed out after {interval}.");
-                }
 
                 if (await moveNextTask)
-                {
                     yield return enumerator.Current;
-                }
                 else
-                {
                     break;
-                }
             }
             finally
             {
@@ -565,31 +509,21 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return enumerator.Current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
 
         if (resumeSource != null)
-        {
             await foreach (var item in resumeSource.WithCancellation(cancellationToken))
-            {
                 yield return item;
-            }
-        }
     }
 
     async IAsyncEnumerable<T> onErrorReturn(T value, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -623,28 +557,20 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return enumerator.Current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
 
         if (caughtException != null)
-        {
             yield return value;
-        }
     }
 
     async IAsyncEnumerable<T> onErrorMap(Func<Exception, Exception> mapper, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -678,28 +604,20 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return enumerator.Current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
 
         if (mappedException != null)
-        {
             throw mappedException;
-        }
     }
 
     async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -769,9 +687,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         try
         {
             await foreach (var item in this.WithCancellation(cancellationToken))
-            {
                 yield return item;
-            }
         }
         finally
         {
@@ -782,17 +698,13 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
     async Task forEachAsync(Action<T> action, CancellationToken cancellationToken)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             action(item);
-        }
     }
 
     async Task forEachAsync(Func<T, Task> action, CancellationToken cancellationToken)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             await action(item);
-        }
     }
 
     void disconnect()
@@ -809,9 +721,7 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         lock (_lock)
         {
             if (connectionTask != null && !connectionTask.IsCompleted)
-            {
                 return new ConnectionDisposable(this);
-            }
 
             cts = new CancellationTokenSource();
             var token = cts.Token;
@@ -836,12 +746,8 @@ internal sealed class ConnectableStream<T> : IConnectableStream<T>
         try
         {
             while (await channel.Reader.WaitToReadAsync(cancellationToken))
-            {
                 while (channel.Reader.TryRead(out var item))
-                {
                     yield return item;
-                }
-            }
 
             // Check for error
             await channel.Reader.Completion;
@@ -1021,9 +927,8 @@ internal static class EnumerableExtensions
     public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
     {
         foreach (var item in source)
-        {
             yield return item;
-        }
+
         await Task.Yield();
     }
 }

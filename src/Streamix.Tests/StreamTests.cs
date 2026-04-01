@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Streamix;
+using Streamix.Abstractions;
 
 namespace Streamix.Tests;
 
@@ -10,11 +10,11 @@ public class StreamTests
     public async Task Empty_Stream_Is_Empty()
     {
         IStream<int> stream = Stream.Empty<int>();
+
         int count = 0;
         await foreach (var _ in stream)
-        {
             count++;
-        }
+
         Assert.That(count, Is.EqualTo(0));
     }
 

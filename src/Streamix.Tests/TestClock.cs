@@ -1,4 +1,4 @@
-using Streamix;
+using Streamix.Abstractions;
 
 namespace Streamix.Tests;
 

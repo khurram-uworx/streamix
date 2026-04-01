@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Streamix;
+using Streamix.Abstractions;
 
 namespace Streamix.Tests;
 
@@ -75,8 +75,7 @@ public class TimeBasedOperatorTests
         var task = Task.Run(async () =>
         {
             await foreach (var item in delayed.WithCancellation(cts.Token))
-            {
-            }
+            { }
         });
 
         await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
@@ -95,9 +94,7 @@ public class TimeBasedOperatorTests
         var task = Task.Run(async () =>
         {
             await foreach (var item in delayed)
-            {
                 results.Add(item);
-            }
         });
 
         // Initially no items
@@ -135,9 +132,7 @@ public class TimeBasedOperatorTests
         var task = Task.Run(async () =>
         {
             await foreach (var item in throttled)
-            {
                 results.Add(item);
-            }
         });
 
         // 1. Emit first item

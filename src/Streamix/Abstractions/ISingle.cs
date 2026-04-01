@@ -1,4 +1,4 @@
-namespace Streamix;
+namespace Streamix.Abstractions;
 
 /// <summary>
 /// Represents a stream that can have 0 or 1 item, backed by <see cref="IAsyncEnumerable{T}"/>.

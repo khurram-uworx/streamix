@@ -1,4 +1,4 @@
-namespace Streamix;
+namespace Streamix.Abstractions;
 
 /// <summary>
 /// Represents a stream that can be connected to a shared source.

@@ -1,3 +1,4 @@
+using Streamix.Abstractions;
 using Streamix.Concurrency;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -15,7 +16,7 @@ public sealed class Stream<T> : IStream<T>
     {
         if (streams == null || streams.Length == 0) yield break;
 
-        var channel = System.Threading.Channels.Channel.CreateUnbounded<T>();
+        var channel = Channel.CreateUnbounded<T>();
         var tasks = new List<Task>();
 
         foreach (var stream in streams)
@@ -25,9 +26,7 @@ public sealed class Stream<T> : IStream<T>
                 try
                 {
                     await foreach (var item in stream.WithCancellation(cancellationToken))
-                    {
                         await channel.Writer.WriteAsync(item, cancellationToken);
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -40,22 +39,14 @@ public sealed class Stream<T> : IStream<T>
         _ = Task.WhenAll(tasks).ContinueWith(t =>
         {
             if (t.IsFaulted)
-            {
                 channel.Writer.TryComplete(t.Exception?.InnerException);
-            }
             else
-            {
                 channel.Writer.TryComplete();
-            }
         }, cancellationToken);
 
         while (await channel.Reader.WaitToReadAsync(cancellationToken))
-        {
             while (channel.Reader.TryRead(out var item))
-            {
                 yield return item;
-            }
-        }
 
         // Ensure any exception that completed the channel is rethrown
         await channel.Reader.Completion;
@@ -72,9 +63,7 @@ public sealed class Stream<T> : IStream<T>
             var t2 = e2.MoveNextAsync();
 
             if (!await t1 || !await t2)
-            {
                 yield break;
-            }
 
             yield return resultSelector(e1.Current, e2.Current);
         }
@@ -92,31 +81,21 @@ public sealed class Stream<T> : IStream<T>
     async IAsyncEnumerable<TResult> map<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             yield return selector(item);
-        }
     }
 
     async IAsyncEnumerable<T> filter(Func<T, bool> predicate, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
-            {
                 yield return item;
-            }
-        }
     }
 
     async IAsyncEnumerable<TResult> flatMap<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
-            {
                 yield return innerItem;
-            }
-        }
     }
 
     async IAsyncEnumerable<TResult> flatMapConcurrent<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -124,9 +103,7 @@ public sealed class Stream<T> : IStream<T>
         if (maxConcurrency == 1)
         {
             await foreach (var item in this.WithCancellation(cancellationToken))
-            {
                 yield return await selector(item);
-            }
             yield break;
         }
 
@@ -216,9 +193,7 @@ public sealed class Stream<T> : IStream<T>
                 if (!hasMore) break;
 
                 while (channel.Reader.TryRead(out var result))
-                {
                     yield return result;
-                }
             }
 
             // Wait for producer to complete and check for exceptions
@@ -235,12 +210,8 @@ public sealed class Stream<T> : IStream<T>
     async IAsyncEnumerable<TResult> flatMapMany<TResult>(Func<T, IStream<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
-            {
                 yield return innerItem;
-            }
-        }
     }
 
     async IAsyncEnumerable<TResult> flatMapManyConcurrent<TResult>(Func<T, IAsyncEnumerable<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -264,9 +235,7 @@ public sealed class Stream<T> : IStream<T>
                         try
                         {
                             await foreach (var result in selector(item).WithCancellation(cts.Token))
-                            {
                                 await channel.Writer.WriteAsync(result, cts.Token);
-                            }
                         }
                         catch (Exception ex)
                         {
@@ -317,9 +286,7 @@ public sealed class Stream<T> : IStream<T>
                 if (!hasMore) break;
 
                 while (channel.Reader.TryRead(out var result))
-                {
                     yield return result;
-                }
             }
 
             // Wait for producer to complete and check for exceptions
@@ -359,9 +326,7 @@ public sealed class Stream<T> : IStream<T>
         }
 
         if (buffer.Count > 0)
-        {
             yield return buffer;
-        }
     }
 
     async IAsyncEnumerable<IStream<T>> window(int count, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -386,9 +351,8 @@ public sealed class Stream<T> : IStream<T>
     async IAsyncEnumerable<T> toAsyncEnumerable(IEnumerable<T> items)
     {
         foreach (var item in items)
-        {
             yield return item;
-        }
+
         await Task.Yield();
     }
 
@@ -430,18 +394,12 @@ public sealed class Stream<T> : IStream<T>
             await timeoutCts.CancelAsync();
 
             if (completedTask == timeoutTask)
-            {
                 throw new TimeoutException($"The operation has timed out after {interval}.");
-            }
 
             if (await moveNextTask)
-            {
                 yield return enumerator.Current;
-            }
             else
-            {
                 break;
-            }
         }
     }
 
@@ -476,30 +434,22 @@ public sealed class Stream<T> : IStream<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return enumerator.Current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
 
         if (resumeSource != null)
         {
             await foreach (var item in resumeSource.WithCancellation(cancellationToken))
-            {
                 yield return item;
-            }
         }
     }
 
@@ -556,13 +506,9 @@ public sealed class Stream<T> : IStream<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
 
@@ -579,13 +525,9 @@ public sealed class Stream<T> : IStream<T>
             {
                 var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
                 if (hasNext)
-                {
                     yield return enumerator.Current;
-                }
                 else
-                {
                     break;
-                }
             }
         }
         finally
@@ -632,21 +574,15 @@ public sealed class Stream<T> : IStream<T>
                 }
 
                 if (hasNext)
-                {
                     yield return enumerator.Current;
-                }
                 else
-                {
                     break;
-                }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
     }
 
@@ -655,9 +591,7 @@ public sealed class Stream<T> : IStream<T>
         try
         {
             await foreach (var item in this.WithCancellation(cancellationToken))
-            {
                 yield return item;
-            }
         }
         finally
         {
@@ -840,18 +774,14 @@ public sealed class Stream<T> : IStream<T>
     public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             action(item);
-        }
     }
 
     /// <inheritdoc />
     public async Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
-        {
             await action(item);
-        }
     }
 
     /// <inheritdoc />

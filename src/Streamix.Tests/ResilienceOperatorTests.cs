@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Streamix;
+using Streamix.Abstractions;
 
 namespace Streamix.Tests;
 
@@ -10,15 +10,15 @@ public class ResilienceOperatorTests
     {
         class Enumerator : IAsyncEnumerator<T>
         {
-            private readonly IClock _clock;
-            private readonly TimeSpan _delay;
-            private readonly CancellationToken _cancellationToken;
+            private readonly IClock clock;
+            private readonly TimeSpan delay;
+            private readonly CancellationToken cancellationToken;
 
             public Enumerator(IClock clock, TimeSpan delay, CancellationToken cancellationToken)
             {
-                _clock = clock;
-                _delay = delay;
-                _cancellationToken = cancellationToken;
+                this.clock = clock;
+                this.delay = delay;
+                this.cancellationToken = cancellationToken;
             }
 
             public T Current => default!;
@@ -27,7 +27,7 @@ public class ResilienceOperatorTests
 
             public async ValueTask<bool> MoveNextAsync()
             {
-                await _clock.Delay(_delay, _cancellationToken);
+                await clock.Delay(delay, cancellationToken);
                 return true;
             }
         }
