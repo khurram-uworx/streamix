@@ -6,8 +6,6 @@ namespace Streamix.Tests;
 [TestFixture]
 public class AggregationOperatorTests
 {
-    #region Merge Tests
-
     [Test]
     public async Task Merge_Combines_Multiple_Streams()
     {
@@ -119,10 +117,6 @@ public class AggregationOperatorTests
         Assert.That(result.Count, Is.EqualTo(4));
         Assert.That(result, Is.EquivalentTo(new[] { 1, 2, 10, 11 }));
     }
-
-    #endregion
-
-    #region Zip Tests
 
     [Test]
     public async Task Zip_Combines_Streams_Of_Same_Length()
@@ -243,6 +237,4 @@ public class AggregationOperatorTests
 
         Assert.That(result, Is.EqualTo(new[] { 11, 13 }));
     }
-
-    #endregion
 }

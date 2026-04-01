@@ -11,93 +11,36 @@ namespace Streamix;
 /// <typeparam name="T">The type of item in the stream.</typeparam>
 public sealed class Single<T> : ISingle<T>
 {
-    private readonly IAsyncEnumerable<T> _source;
-    private readonly IClock _clock;
+    readonly IAsyncEnumerable<T> source;
+    readonly IClock clock;
 
     internal Single(IAsyncEnumerable<T> source, IClock? clock = null)
     {
-        _source = source;
-        _clock = clock ?? SystemClock.Instance;
+        this.source = source;
+        this.clock = clock ?? SystemClock.Instance;
     }
 
-    internal IClock Clock => _clock;
-
-    /// <inheritdoc />
-    public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<TResult> map<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        return _source.GetAsyncEnumerator(cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public ISingle<TResult> Map<TResult>(Func<T, TResult> selector)
-    {
-        return new Single<TResult>(MapInternal(selector));
-    }
-
-    private async IAsyncEnumerable<TResult> MapInternal<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        await foreach (var item in _source.WithCancellation(ct))
-        {
+        await foreach (var item in source.WithCancellation(ct))
             yield return selector(item);
-        }
     }
 
-    /// <inheritdoc />
-    public ISingle<TResult> Select<TResult>(Func<T, TResult> selector) => Map(selector);
-
-    /// <inheritdoc />
-    public ISingle<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector)
+    async IAsyncEnumerable<TResult> flatMap<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        return new Single<TResult>(FlatMapInternal(selector));
-    }
-
-    private async IAsyncEnumerable<TResult> FlatMapInternal<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        await foreach (var item in _source.WithCancellation(ct))
-        {
+        await foreach (var item in source.WithCancellation(ct))
             await foreach (var innerItem in selector(item).WithCancellation(ct))
-            {
                 yield return innerItem;
-            }
-        }
     }
 
-    /// <inheritdoc />
-    public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector)
+    async IAsyncEnumerable<TResult> flatMapMany<TResult>(Func<T, IStream<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        return new Stream<TResult>(FlatMapManyInternal(selector));
-    }
-
-    private async IAsyncEnumerable<TResult> FlatMapManyInternal<TResult>(Func<T, IStream<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        await foreach (var item in _source.WithCancellation(ct))
-        {
+        await foreach (var item in source.WithCancellation(ct))
             await foreach (var innerItem in selector(item).WithCancellation(ct))
-            {
                 yield return innerItem;
-            }
-        }
     }
 
-    /// <inheritdoc />
-    public ISingle<T> OnErrorResume(Func<Exception, ISingle<T>> errorHandler)
-    {
-        return new Single<T>(OnErrorResumeInternal(errorHandler));
-    }
-
-    /// <inheritdoc />
-    public ISingle<T> OnErrorReturn(T value)
-    {
-        return OnErrorResume(_ => Single.From(value));
-    }
-
-    /// <inheritdoc />
-    public ISingle<T> OnErrorMap(Func<Exception, Exception> mapper)
-    {
-        return OnErrorResume(ex => Single.Error<T>(mapper(ex)));
-    }
-
-    private async IAsyncEnumerable<T> OnErrorResumeInternal(Func<Exception, ISingle<T>> errorHandler, [EnumeratorCancellation] CancellationToken ct = default)
+    async IAsyncEnumerable<T> onErrorResume(Func<Exception, ISingle<T>> errorHandler, [EnumeratorCancellation] CancellationToken ct = default)
     {
         IAsyncEnumerator<T>? enumerator = null;
         ISingle<T>? resumeSource = null;
@@ -105,7 +48,7 @@ public sealed class Single<T> : ISingle<T>
         {
             try
             {
-                enumerator = _source.GetAsyncEnumerator(ct);
+                enumerator = source.GetAsyncEnumerator(ct);
             }
             catch (Exception ex)
             {
@@ -128,40 +71,26 @@ public sealed class Single<T> : ISingle<T>
                     }
 
                     if (hasNext)
-                    {
                         yield return enumerator.Current;
-                    }
                     else
-                    {
                         break;
-                    }
                 }
             }
         }
         finally
         {
             if (enumerator != null)
-            {
                 await enumerator.DisposeAsync();
-            }
         }
 
         if (resumeSource != null)
         {
             await foreach (var item in resumeSource.WithCancellation(ct))
-            {
                 yield return item;
-            }
         }
     }
 
-    /// <inheritdoc />
-    public ISingle<T> RunOn(TaskScheduler scheduler)
-    {
-        return new Single<T>(RunOnInternal(scheduler, ct => _source.GetAsyncEnumerator(ct)));
-    }
-
-    private async IAsyncEnumerable<T> RunOnInternal(TaskScheduler scheduler, Func<CancellationToken, IAsyncEnumerator<T>> enumeratorFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, Func<CancellationToken, IAsyncEnumerator<T>> enumeratorFactory, [EnumeratorCancellation] CancellationToken ct = default)
     {
         var enumerator = await Task.Factory.StartNew(() => enumeratorFactory(ct), ct, TaskCreationOptions.None, scheduler);
         try
@@ -170,13 +99,9 @@ public sealed class Single<T> : ISingle<T>
             {
                 var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), ct, TaskCreationOptions.None, scheduler).Unwrap();
                 if (hasNext)
-                {
                     yield return enumerator.Current;
-                }
                 else
-                {
                     yield break;
-                }
             }
         }
         finally
@@ -185,41 +110,7 @@ public sealed class Single<T> : ISingle<T>
         }
     }
 
-    /// <inheritdoc />
-    public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in this.WithCancellation(cancellationToken))
-        {
-            action(item);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in this.WithCancellation(cancellationToken))
-        {
-            await action(item);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task<T> ToTask(CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in this.WithCancellation(cancellationToken))
-        {
-            return item;
-        }
-        return default!;
-    }
-
-    /// <inheritdoc />
-    public ISingle<T> Retry(int retryCount = 1)
-    {
-        return Single.From(RetryInternal(retryCount), _clock);
-    }
-
-    private async IAsyncEnumerable<T> RetryInternal(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<T> retry(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int attempts = 0;
         while (true)
@@ -228,7 +119,7 @@ public sealed class Single<T> : ISingle<T>
             IAsyncEnumerator<T>? enumerator = null;
             try
             {
-                enumerator = _source.GetAsyncEnumerator(cancellationToken);
+                enumerator = source.GetAsyncEnumerator(cancellationToken);
             }
             catch (Exception)
             {
@@ -262,42 +153,124 @@ public sealed class Single<T> : ISingle<T>
                         yield break; // Single should only emit one item
                     }
                     else
-                    {
                         yield break;
-                    }
                 }
             }
 
-            if (!failed) yield break;
+            if (!failed)
+                yield break;
         }
     }
 
-    /// <inheritdoc />
-    public ISingle<T> Timeout(TimeSpan interval)
-    {
-        return Single.From(TimeoutInternal(interval), _clock);
-    }
-
-    private async IAsyncEnumerable<T> TimeoutInternal(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<T> timeout(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await using var enumerator = this.GetAsyncEnumerator(cancellationToken);
 
         var moveNextTask = enumerator.MoveNextAsync().AsTask();
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var timeoutTask = _clock.Delay(interval, timeoutCts.Token);
+        var timeoutTask = clock.Delay(interval, timeoutCts.Token);
 
         var completedTask = await Task.WhenAny(moveNextTask, timeoutTask);
         await timeoutCts.CancelAsync();
 
         if (completedTask == timeoutTask)
-        {
             throw new TimeoutException($"The operation has timed out after {interval}.");
-        }
 
         if (await moveNextTask)
-        {
             yield return enumerator.Current;
+    }
+
+    internal IClock Clock => clock;
+
+    /// <inheritdoc />
+    public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    {
+        return source.GetAsyncEnumerator(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public ISingle<TResult> Map<TResult>(Func<T, TResult> selector)
+    {
+        return new Single<TResult>(map(selector));
+    }
+
+    /// <inheritdoc />
+    public ISingle<TResult> Select<TResult>(Func<T, TResult> selector) => Map(selector);
+
+    /// <inheritdoc />
+    public ISingle<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector)
+    {
+        return new Single<TResult>(flatMap(selector));
+    }
+
+    /// <inheritdoc />
+    public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector)
+    {
+        return new Stream<TResult>(flatMapMany(selector));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> OnErrorResume(Func<Exception, ISingle<T>> errorHandler)
+    {
+        return new Single<T>(onErrorResume(errorHandler));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> OnErrorReturn(T value)
+    {
+        return OnErrorResume(_ => Single.From(value));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> OnErrorMap(Func<Exception, Exception> mapper)
+    {
+        return OnErrorResume(ex => Single.Error<T>(mapper(ex)));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> RunOn(TaskScheduler scheduler)
+    {
+        return new Single<T>(runOn(scheduler, ct => source.GetAsyncEnumerator(ct)));
+    }
+
+    /// <inheritdoc />
+    public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            action(item);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            await action(item);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<T> ToTask(CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+        {
+            return item;
+        }
+        return default!;
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Retry(int retryCount = 1)
+    {
+        return Single.From(retry(retryCount), clock);
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Timeout(TimeSpan interval)
+    {
+        return Single.From(timeout(interval), clock);
     }
 }
 
@@ -306,6 +279,16 @@ public sealed class Single<T> : ISingle<T>
 /// </summary>
 public static class Single
 {
+    static async IAsyncEnumerable<T> toAsyncEnumerable<T>(T value)
+    {
+        yield return value;
+    }
+
+    static async IAsyncEnumerable<T> toAsyncEnumerable<T>(Task<T> task)
+    {
+        yield return await task;
+    }
+
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
@@ -319,12 +302,12 @@ public static class Single
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a single value.
     /// </summary>
-    public static ISingle<T> From<T>(T value) => From(ToAsyncEnumerable(value));
+    public static ISingle<T> From<T>(T value) => From(toAsyncEnumerable(value));
 
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a <see cref="Task{T}"/>.
     /// </summary>
-    public static ISingle<T> From<T>(Task<T> task) => From(ToAsyncEnumerable(task));
+    public static ISingle<T> From<T>(Task<T> task) => From(toAsyncEnumerable(task));
 
     /// <summary>
     /// Creates an empty <see cref="ISingle{T}"/>.
@@ -335,19 +318,9 @@ public static class Single
     /// Creates a <see cref="ISingle{T}"/> that fails with the specified exception.
     /// </summary>
     public static ISingle<T> Error<T>(Exception exception) => From(AsyncEnumerableInternal.Error<T>(exception));
-
-    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(T value)
-    {
-        yield return value;
-    }
-
-    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(Task<T> task)
-    {
-        yield return await task;
-    }
 }
 
-internal static class AsyncEnumerableInternal
+static class AsyncEnumerableInternal
 {
     public static async IAsyncEnumerable<T> Empty<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

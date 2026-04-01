@@ -8,6 +8,16 @@ namespace Streamix.Tests;
 [TestFixture]
 public class ConcurrencyTests
 {
+    async IAsyncEnumerable<int> generateWithLogging(List<int> log, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        for (int i = 1; i <= 10; i++)
+        {
+            log.Add(i);
+            yield return i;
+            await Task.Yield();
+        }
+    }
+
     [Test]
     public async Task FlatMap_RespectsMaxConcurrency()
     {
@@ -72,7 +82,7 @@ public class ConcurrencyTests
     {
         const int maxConcurrency = 2;
         var pulledItems = new List<int>();
-        var source = Stream.From(GenerateWithLogging(pulledItems));
+        var source = Stream.From(generateWithLogging(pulledItems));
 
         var enumerator = source
             .FlatMap(async x =>
@@ -121,16 +131,6 @@ public class ConcurrencyTests
         }
 
         Assert.That(count, Is.EqualTo(10));
-    }
-
-    private async IAsyncEnumerable<int> GenerateWithLogging(List<int> log, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        for (int i = 1; i <= 10; i++)
-        {
-            log.Add(i);
-            yield return i;
-            await Task.Yield();
-        }
     }
 
     [Test]

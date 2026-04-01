@@ -7,14 +7,14 @@ namespace Streamix.Concurrency;
 /// </summary>
 public sealed class SystemClock : IClock
 {
-    private static readonly Lazy<SystemClock> _instance = new(() => new SystemClock());
+    static readonly Lazy<SystemClock> instance = new(() => new SystemClock());
 
     /// <summary>
     /// Gets the singleton instance of <see cref="SystemClock"/>.
     /// </summary>
-    public static SystemClock Instance => _instance.Value;
+    public static SystemClock Instance => instance.Value;
 
-    private SystemClock() { }
+    SystemClock() { }
 
     /// <inheritdoc />
     public DateTimeOffset Now => DateTimeOffset.UtcNow;

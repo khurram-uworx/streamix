@@ -3,9 +3,33 @@ using Streamix.Abstractions;
 
 namespace Streamix.Tests;
 
+static class TestExtensions
+{
+    public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
+    {
+        foreach (var item in source)
+        {
+            yield return item;
+            await Task.Yield();
+        }
+    }
+}
+
 [TestFixture]
 public class FlatteningOperatorTests
 {
+    static async IAsyncEnumerable<int> throwError()
+    {
+        yield return 1;
+        throw new InvalidOperationException("Inner fail");
+    }
+
+    static async IAsyncEnumerable<int> throwErrorAfter(int count)
+    {
+        for (int i = 0; i < count; i++) yield return i;
+        throw new InvalidOperationException("Outer fail");
+    }
+
     [Test]
     public async Task Stream_FlatMap_WithSingle_Sequential()
     {
@@ -115,30 +139,18 @@ public class FlatteningOperatorTests
     public void FlatMap_Propagates_Inner_Failure()
     {
         var stream = Stream.Range(1, 3)
-            .FlatMapMany(x => x == 2 ? Stream.From(ThrowError()) : Stream.Range(x, 1));
+            .FlatMapMany(x => x == 2 ? Stream.From(throwError()) : Stream.Range(x, 1));
 
         Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
-    }
-
-    private static async IAsyncEnumerable<int> ThrowError()
-    {
-        yield return 1;
-        throw new InvalidOperationException("Inner fail");
     }
 
     [Test]
     public void FlatMap_Propagates_Outer_Failure()
     {
-        var source = Stream.From(ThrowErrorAfter(1));
+        var source = Stream.From(throwErrorAfter(1));
         var stream = source.FlatMapMany(x => Stream.Range(x, 1));
 
         Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
-    }
-
-    private static async IAsyncEnumerable<int> ThrowErrorAfter(int count)
-    {
-        for (int i = 0; i < count; i++) yield return i;
-        throw new InvalidOperationException("Outer fail");
     }
 
     [Test]
@@ -153,17 +165,5 @@ public class FlatteningOperatorTests
         {
             await foreach (var _ in stream.WithCancellation(cts.Token)) { }
         });
-    }
-}
-
-internal static class TestExtensions
-{
-    public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
-    {
-        foreach (var item in source)
-        {
-            yield return item;
-            await Task.Yield();
-        }
     }
 }

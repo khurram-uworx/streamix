@@ -1,4 +1,4 @@
-﻿namespace Streamix.Tests;
+namespace Streamix.Tests.Infrastructure;
 
 class NUnitConstants
 {

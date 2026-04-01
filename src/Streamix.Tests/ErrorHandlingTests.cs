@@ -6,8 +6,6 @@ namespace Streamix.Tests;
 [TestFixture]
 public class ErrorHandlingTests
 {
-    #region Stream Tests
-
     [Test]
     public async Task Stream_OnErrorResume_Recovers_From_Error()
     {
@@ -120,10 +118,6 @@ public class ErrorHandlingTests
         });
     }
 
-    #endregion
-
-    #region Single Tests
-
     [Test]
     public async Task Single_OnErrorResume_Recovers()
     {
@@ -168,6 +162,4 @@ public class ErrorHandlingTests
         int result = await single.ToTask();
         Assert.That(result, Is.EqualTo(1));
     }
-
-    #endregion
 }

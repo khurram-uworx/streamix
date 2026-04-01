@@ -1,9 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
-namespace Streamix.Tests;
+namespace Streamix.Tests.Infrastructure;
 
-internal class NUnitLogger<T> : ILogger<T>, IDisposable
+class NUnitLogger<T> : ILogger<T>, IDisposable
 {
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
