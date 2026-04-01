@@ -5,6 +5,8 @@
     <File Path=".gitignore" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="src/Streamix.Interop.AsyncRx/Streamix.Interop.AsyncRx.csproj" />
+  <Project Path="src/Streamix.Tests.Interop.AsyncRx/Streamix.Tests.Interop.AsyncRx.csproj" />
   <Project Path="src/Streamix.Tests/Streamix.Tests.csproj" />
   <Project Path="src/Streamix/Streamix.csproj" Id="558f25ed-012c-4d4c-bf4d-355e4bdbd492" />
 </Solution>
