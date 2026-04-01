@@ -105,6 +105,16 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler);
 
     /// <summary>
+    /// Resumes a stream with a single element if an error occurs.
+    /// </summary>
+    IStream<T> OnErrorReturn(T value);
+
+    /// <summary>
+    /// Maps the error into another exception.
+    /// </summary>
+    IStream<T> OnErrorMap(Func<Exception, Exception> mapper);
+
+    /// <summary>
     /// Shares the source stream.
     /// </summary>
     IConnectableStream<T> Publish();

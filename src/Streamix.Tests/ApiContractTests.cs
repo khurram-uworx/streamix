@@ -19,7 +19,7 @@ public class ApiContractTests
         // Factory methods on static facade
         Assert.That(typeof(Stream).GetMethod("Range"), Is.Not.Null);
         Assert.That(typeof(Stream).GetMethod("Empty"), Is.Not.Null);
-        Assert.That(typeof(Stream).GetMethod("From"), Is.Not.Null);
+        Assert.That(typeof(Stream).GetMethods().Any(m => m.Name == "From"), Is.True);
         Assert.That(typeof(Stream).GetMethod("Merge"), Is.Not.Null);
         Assert.That(typeof(Stream).GetMethods().Any(m => m.Name == "Zip"), Is.True);
 
@@ -39,6 +39,8 @@ public class ApiContractTests
         Assert.That(type.GetMethod("Retry"), Is.Not.Null);
         Assert.That(type.GetMethod("Timeout"), Is.Not.Null);
         Assert.That(type.GetMethod("OnErrorResume"), Is.Not.Null);
+        Assert.That(type.GetMethod("OnErrorReturn"), Is.Not.Null);
+        Assert.That(type.GetMethod("OnErrorMap"), Is.Not.Null);
         Assert.That(type.GetMethod("Publish"), Is.Not.Null);
         Assert.That(type.GetMethod("RunOn"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "ForEachAsync"), Is.True);
@@ -58,6 +60,8 @@ public class ApiContractTests
         Assert.That(type.GetMethod("FlatMap"), Is.Not.Null);
         Assert.That(type.GetMethod("FlatMapMany"), Is.Not.Null);
         Assert.That(type.GetMethod("OnErrorResume"), Is.Not.Null);
+        Assert.That(type.GetMethod("OnErrorReturn"), Is.Not.Null);
+        Assert.That(type.GetMethod("OnErrorMap"), Is.Not.Null);
         Assert.That(type.GetMethod("RunOn"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "ForEachAsync"), Is.True);
         Assert.That(type.GetMethod("ToTask"), Is.Not.Null);
