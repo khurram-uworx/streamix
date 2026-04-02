@@ -234,6 +234,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             }
             finally
             {
+                try { await Task.WhenAll(tasks); } catch { }
                 semaphore.Dispose();
             }
         }
@@ -373,6 +374,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             }
             finally
             {
+                try { await Task.WhenAll(tasks); } catch { }
                 semaphore.Dispose();
             }
         }, cts.Token);
@@ -382,6 +384,79 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             while (await channel.Reader.WaitToReadAsync(cancellationToken))
                 while (channel.Reader.TryRead(out var result))
                     yield return result;
+
+            await producerTask;
+            await channel.Reader.Completion;
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            try { await producerTask; } catch { }
+        }
+    }
+
+    async IAsyncEnumerable<TResult> parallelMapOrdered<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (maxConcurrency == 1)
+        {
+            await foreach (var item in this.WithCancellation(cancellationToken))
+                yield return await selector(item);
+            yield break;
+        }
+
+        var channel = Channel.CreateBounded<Task<TResult>>(maxConcurrency);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            var semaphore = new SemaphoreSlim(maxConcurrency);
+            var tasks = new List<Task>();
+            try
+            {
+                await foreach (var item in this.WithCancellation(cts.Token))
+                {
+                    await semaphore.WaitAsync(cts.Token);
+
+                    var task = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            return await selector(item);
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    }, cts.Token);
+
+                    tasks.Add(task);
+                    await channel.Writer.WriteAsync(task, cts.Token);
+                    tasks.RemoveAll(t => t.IsCompleted);
+                }
+
+                await Task.WhenAll(tasks);
+                channel.Writer.Complete();
+            }
+            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+            finally
+            {
+                try { await Task.WhenAll(tasks); } catch { }
+                semaphore.Dispose();
+            }
+        }, cts.Token);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+                while (channel.Reader.TryRead(out var task))
+                    yield return await task;
 
             await producerTask;
             await channel.Reader.Completion;
@@ -938,6 +1013,20 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         return Stream.From(flatMapAwaitConcurrent(selector, maxConcurrency));
+    }
+
+    /// <inheritdoc />
+    public IStream<TResult> ParallelMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency)
+    {
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+        return FlatMap(selector, maxConcurrency);
+    }
+
+    /// <inheritdoc />
+    public IStream<TResult> ParallelMapOrdered<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency)
+    {
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+        return Stream.From(parallelMapOrdered(selector, maxConcurrency));
     }
 
     /// <inheritdoc />

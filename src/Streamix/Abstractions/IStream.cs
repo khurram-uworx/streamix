@@ -82,6 +82,26 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector, int maxConcurrency = 1);
 
     /// <summary>
+    /// Projects each element of a stream into a new form by applying an asynchronous transform function in parallel.
+    /// Elements are emitted as soon as they are ready, so the original order may not be preserved.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
+    /// <param name="selector">An asynchronous transform function to apply to each element.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async transform function on each element of source.</returns>
+    IStream<TResult> ParallelMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency);
+
+    /// <summary>
+    /// Projects each element of a stream into a new form by applying an asynchronous transform function in parallel,
+    /// while preserving the original upstream ordering.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
+    /// <param name="selector">An asynchronous transform function to apply to each element.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async transform function on each element of source, in their original order.</returns>
+    IStream<TResult> ParallelMapOrdered<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency);
+
+    /// <summary>
     /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream. Alias for <see cref="FlatMap{TResult}(Func{T, ISingle{TResult}}, int)"/>.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
