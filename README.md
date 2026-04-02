@@ -89,10 +89,10 @@ var hot  = cold.Publish().RefCount(); // shared hot stream
 
 ## 📦 Core Operators
 
-* `Map` / `Select`
-* `Filter` / `Where`
-* `FlatMap` / `SelectMany`
-* `FlatMapMany`
+* `Map` / `Select` / `MapAwait`
+* `Filter` / `Where` / `FilterAwait`
+* `FlatMap` / `SelectMany` / `FlatMapAwait`
+* `FlatMapMany` / `FlatMapManyAwait`
 * `Merge` / `Zip`
 * `Buffer` / `Window`
 * `Throttle` / `Delay`

@@ -15,6 +15,14 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<TResult> Map<TResult>(Func<T, TResult> selector);
 
     /// <summary>
+    /// Projects each element of a stream into a new form using an asynchronous selector function.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
+    /// <param name="selector">An asynchronous transform function to apply to each element.</param>
+    /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async transform function on each element of source.</returns>
+    IStream<TResult> MapAwait<TResult>(Func<T, ValueTask<TResult>> selector);
+
+    /// <summary>
     /// Projects each element of a stream into a new form. Alias for <see cref="Map{TResult}"/>.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
@@ -28,6 +36,13 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <param name="predicate">A function to test each element for a condition.</param>
     /// <returns>An <see cref="IStream{T}"/> that contains elements from the input stream that satisfy the condition.</returns>
     IStream<T> Filter(Func<T, bool> predicate);
+
+    /// <summary>
+    /// Filters a stream of values based on an asynchronous predicate.
+    /// </summary>
+    /// <param name="predicate">An asynchronous function to test each element for a condition.</param>
+    /// <returns>An <see cref="IStream{T}"/> that contains elements from the input stream that satisfy the condition.</returns>
+    IStream<T> FilterAwait(Func<T, ValueTask<bool>> predicate);
 
     /// <summary>
     /// Filters a stream of values based on a predicate. Alias for <see cref="Filter"/>.
@@ -57,6 +72,16 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1);
 
     /// <summary>
+    /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> using an asynchronous selector and flattens the resulting streams into one stream.
+    /// Supports concurrency control.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
+    /// <param name="selector">An asynchronous transform function to apply to each element.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async one-to-one transform function on each element of the input stream.</returns>
+    IStream<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector, int maxConcurrency = 1);
+
+    /// <summary>
     /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream. Alias for <see cref="FlatMap{TResult}(Func{T, ISingle{TResult}}, int)"/>.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
@@ -74,6 +99,16 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the one-to-many transform function on each element of the input stream.</returns>
     IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency = 1);
+
+    /// <summary>
+    /// Projects each element of a stream to an <see cref="IStream{TResult}"/> using an asynchronous selector and flattens the resulting streams into one stream.
+    /// Supports concurrency control.
+    /// </summary>
+    /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
+    /// <param name="selector">An asynchronous transform function to apply to each element.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async one-to-many transform function on each element of the input stream.</returns>
+    IStream<TResult> FlatMapManyAwait<TResult>(Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency = 1);
 
     /// <summary>
     /// Returns a specified number of contiguous elements from the start of a stream.

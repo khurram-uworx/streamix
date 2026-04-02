@@ -26,6 +26,12 @@ public sealed class Single<T> : ISingle<T>
             yield return selector(item);
     }
 
+    async IAsyncEnumerable<TResult> mapAwait<TResult>(Func<T, ValueTask<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in source.WithCancellation(ct))
+            yield return await selector(item);
+    }
+
     async IAsyncEnumerable<TResult> flatMap<TResult>(Func<T, ISingle<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var item in source.WithCancellation(ct))
@@ -33,11 +39,31 @@ public sealed class Single<T> : ISingle<T>
                 yield return innerItem;
     }
 
+    async IAsyncEnumerable<TResult> flatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in source.WithCancellation(ct))
+        {
+            var innerSingle = await selector(item);
+            await foreach (var innerItem in innerSingle.WithCancellation(ct))
+                yield return innerItem;
+        }
+    }
+
     async IAsyncEnumerable<TResult> flatMapMany<TResult>(Func<T, IStream<TResult>> selector, [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var item in source.WithCancellation(ct))
             await foreach (var innerItem in selector(item).WithCancellation(ct))
                 yield return innerItem;
+    }
+
+    async IAsyncEnumerable<TResult> flatMapManyAwait<TResult>(Func<T, ValueTask<IStream<TResult>>> selector, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in source.WithCancellation(ct))
+        {
+            var innerStream = await selector(item);
+            await foreach (var innerItem in innerStream.WithCancellation(ct))
+                yield return innerItem;
+        }
     }
 
     async IAsyncEnumerable<T> onErrorResume(Func<Exception, ISingle<T>> errorHandler, [EnumeratorCancellation] CancellationToken ct = default)
@@ -258,9 +284,21 @@ public sealed class Single<T> : ISingle<T>
     }
 
     /// <inheritdoc />
+    public ISingle<TResult> MapAwait<TResult>(Func<T, ValueTask<TResult>> selector)
+    {
+        return new Single<TResult>(mapAwait(selector));
+    }
+
+    /// <inheritdoc />
     public ISingle<TResult> Map<TResult>(Func<T, TResult> selector)
     {
         return new Single<TResult>(map(selector));
+    }
+
+    /// <inheritdoc />
+    public ISingle<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector)
+    {
+        return new Single<TResult>(flatMapAwait(selector));
     }
 
     /// <inheritdoc />
@@ -276,6 +314,12 @@ public sealed class Single<T> : ISingle<T>
     public IStream<TResult> FlatMapMany<TResult>(Func<T, IStream<TResult>> selector)
     {
         return new Stream<TResult>(flatMapMany(selector));
+    }
+
+    /// <inheritdoc />
+    public IStream<TResult> FlatMapManyAwait<TResult>(Func<T, ValueTask<IStream<TResult>>> selector)
+    {
+        return new Stream<TResult>(flatMapManyAwait(selector));
     }
 
     /// <inheritdoc />

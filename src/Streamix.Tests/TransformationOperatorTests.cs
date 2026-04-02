@@ -37,6 +37,34 @@ public class TransformationOperatorTests
     }
 
     [Test]
+    public async Task MapAwait_Transforms_Elements_Asynchronously()
+    {
+        var result = await Stream.Range(1, 3)
+            .MapAwait(async x =>
+            {
+                await Task.Yield();
+                return x * 10;
+            })
+            .ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 10, 20, 30 }));
+    }
+
+    [Test]
+    public async Task FilterAwait_Filters_Elements_Asynchronously()
+    {
+        var result = await Stream.Range(1, 5)
+            .FilterAwait(async x =>
+            {
+                await Task.Yield();
+                return x % 2 == 0;
+            })
+            .ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 2, 4 }));
+    }
+
+    [Test]
     public async Task Where_Is_Alias_For_Filter()
     {
         var result = await Stream.Range(1, 5)

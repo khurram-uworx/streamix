@@ -166,4 +166,64 @@ public class FlatteningOperatorTests
             await foreach (var _ in stream.WithCancellation(cts.Token)) { }
         });
     }
+
+    [Test]
+    public async Task FlatMapAwait_WithSingle_Sequential()
+    {
+        var result = await Stream.Range(1, 3)
+            .FlatMapAwait(async x =>
+            {
+                await Task.Yield();
+                return Single.From(x * 10);
+            })
+            .ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 10, 20, 30 }));
+    }
+
+    [Test]
+    public async Task FlatMapManyAwait_Sequential()
+    {
+        var result = await Stream.Range(1, 2)
+            .FlatMapManyAwait(async x =>
+            {
+                await Task.Yield();
+                return Stream.Range(x * 10, 2);
+            })
+            .ToListAsync();
+
+        // 1 -> 10, 11
+        // 2 -> 20, 21
+        Assert.That(result, Is.EqualTo(new[] { 10, 11, 20, 21 }));
+    }
+
+    [Test]
+    public async Task FlatMapAwait_Concurrent()
+    {
+        var result = await Stream.Range(1, 5)
+            .FlatMapAwait(async x =>
+            {
+                await Task.Delay(100 - (x * 10));
+                return Single.From(x * 10);
+            }, maxConcurrency: 5)
+            .ToListAsync();
+
+        Assert.That(result, Has.Count.EqualTo(5));
+        Assert.That(result, Is.EquivalentTo(new[] { 10, 20, 30, 40, 50 }));
+    }
+
+    [Test]
+    public async Task FlatMapManyAwait_Concurrent()
+    {
+        var result = await Stream.Range(1, 2)
+            .FlatMapManyAwait(async x =>
+            {
+                await Task.Delay(50);
+                return Stream.Range(x * 10, 2);
+            }, maxConcurrency: 2)
+            .ToListAsync();
+
+        Assert.That(result, Has.Count.EqualTo(4));
+        Assert.That(result, Is.EquivalentTo(new[] { 10, 11, 20, 21 }));
+    }
 }

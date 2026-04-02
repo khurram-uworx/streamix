@@ -137,4 +137,45 @@ public class SingleTests
         await foreach (var item in stream) result.Add(item);
         Assert.That(result, Is.EqualTo(new[] { 42 }));
     }
+
+    [Test]
+    public async Task MapAwait_Transforms_Value_Asynchronously()
+    {
+        ISingle<int> single = Single.From(5).MapAwait(async x =>
+        {
+            await Task.Yield();
+            return x * 2;
+        });
+        int result = await single.ToTask();
+        Assert.That(result, Is.EqualTo(10));
+    }
+
+    [Test]
+    public async Task FlatMapAwait_Transforms_Value_Asynchronously()
+    {
+        ISingle<int> single = Single.From(5).FlatMapAwait(async x =>
+        {
+            await Task.Yield();
+            return Single.From(x + 3);
+        });
+        int result = await single.ToTask();
+        Assert.That(result, Is.EqualTo(8));
+    }
+
+    [Test]
+    public async Task FlatMapManyAwait_Flattens_To_Stream_Asynchronously()
+    {
+        ISingle<int> single = Single.From(3);
+        IStream<int> stream = single.FlatMapManyAwait(async x =>
+        {
+            await Task.Yield();
+            return Stream.Range(1, x);
+        });
+        var result = new List<int>();
+        await foreach (var item in stream)
+        {
+            result.Add(item);
+        }
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
 }

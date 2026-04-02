@@ -9,122 +9,6 @@ using System.Runtime.CompilerServices;
 /// </summary>
 public static class LinqExtensions
 {
-    static async IAsyncEnumerable<T> filterAsync<T>(IStream<T> source, Func<T, ValueTask<bool>> predicate, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in source.WithCancellation(cancellationToken))
-        {
-            if (await predicate(item))
-                yield return item;
-        }
-    }
-
-    static async IAsyncEnumerable<TResult> selectAsync<T, TResult>(IStream<T> source, Func<T, ValueTask<TResult>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in source.WithCancellation(cancellationToken))
-            yield return await selector(item);
-    }
-
-    static async IAsyncEnumerable<TResult> selectManyAsync<T, TResult>(IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var item in source.WithCancellation(cancellationToken))
-        {
-            var innerStream = await selector(item);
-            await foreach (var innerItem in innerStream.WithCancellation(cancellationToken))
-                yield return innerItem;
-        }
-    }
-
-    static async IAsyncEnumerable<TResult> selectManyAsyncConcurrent<T, TResult>(IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        if (maxConcurrency <= 1)
-        {
-            await foreach (var item in selectManyAsync(source, selector, cancellationToken))
-                yield return item;
-            yield break;
-        }
-
-        var channel = System.Threading.Channels.Channel.CreateBounded<TResult>(maxConcurrency);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
-        {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
-            {
-                await foreach (var item in source.WithCancellation(cts.Token))
-                {
-                    await semaphore.WaitAsync(cts.Token);
-
-                    var task = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var innerStream = await selector(item);
-                            await foreach (var result in innerStream.WithCancellation(cts.Token))
-                                await channel.Writer.WriteAsync(result, cts.Token);
-                        }
-                        catch (Exception ex)
-                        {
-                            channel.Writer.TryComplete(ex);
-                            throw;
-                        }
-                        finally
-                        {
-                            semaphore.Release();
-                        }
-                    }, cts.Token);
-
-                    tasks.Add(task);
-                    tasks.RemoveAll(t => t.IsCompleted);
-                }
-
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                semaphore.Dispose();
-            }
-        }, cts.Token);
-
-        try
-        {
-            while (true)
-            {
-                bool hasMore;
-                try
-                {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore) break;
-
-                while (channel.Reader.TryRead(out var result))
-                    yield return result;
-            }
-
-            await producerTask;
-            await channel.Reader.Completion;
-        }
-        finally
-        {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
-        }
-    }
 
     /// <summary>
     /// Filters a stream of values based on a predicate.
@@ -146,7 +30,7 @@ public static class LinqExtensions
     /// <returns>An <see cref="IStream{T}"/> that contains elements from the input stream that satisfy the condition.</returns>
     public static IStream<T> WhereAsync<T>(this IStream<T> source, Func<T, ValueTask<bool>> predicate)
     {
-        return Stream.From(filterAsync(source, predicate));
+        return source.FilterAwait(predicate);
     }
 
     /// <summary>
@@ -171,7 +55,7 @@ public static class LinqExtensions
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async transform function on each element of source.</returns>
     public static IStream<TResult> SelectAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<TResult>> selector)
     {
-        return Stream.From(selectAsync(source, selector));
+        return source.MapAwait(selector);
     }
 
     /// <summary>
@@ -209,7 +93,7 @@ public static class LinqExtensions
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async one-to-many transform function on each element of the input stream.</returns>
     public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector)
     {
-        return Stream.From(selectManyAsync(source, selector));
+        return source.FlatMapManyAwait(selector);
     }
 
     /// <summary>
@@ -223,7 +107,7 @@ public static class LinqExtensions
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async one-to-many transform function on each element of the input stream.</returns>
     public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency)
     {
-        return Stream.From(selectManyAsyncConcurrent(source, selector, maxConcurrency));
+        return source.FlatMapManyAwait(selector, maxConcurrency);
     }
 
     /// <summary>
