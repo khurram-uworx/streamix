@@ -101,6 +101,36 @@ var hot  = cold.Publish().RefCount(); // shared hot stream
 
 ---
 
+## 🔗 LINQ & Query Syntax Support
+
+Streamix supports both **fluent and query comprehension syntax**:
+
+```csharp
+// Query syntax (from...where...select)
+var result = await (
+    from x in Stream.Range(1, 10)
+    where x % 2 == 0
+    select x * 10
+).ToListAsync();
+
+// Fluent syntax
+var result = await Stream.Range(1, 10)
+    .Where(x => x % 2 == 0)
+    .Select(x => x * 10)
+    .ToListAsync();
+
+// Async with ValueTask<T>
+var result = await Stream.Range(1, 10)
+    .WhereAsync(async x => await ValidateAsync(x))
+    .SelectAsync(async x => await FetchAsync(x))
+    .SelectManyAsync(async x => await GetStream(x), maxConcurrency: 3)
+    .ToListAsync();
+```
+
+**Available:** `Where`, `Select`, `SelectMany` (sync) and `WhereAsync`, `SelectAsync`, `SelectManyAsync` (async)
+
+---
+
 ## 🔌 Interop
 
 ### From AsyncRx.NET
@@ -182,28 +212,6 @@ stream
 * Simple sequential async calls (`await` is enough)
 * CPU-bound work (use Parallel / PLINQ)
 * Legacy Rx-only pipelines
-
----
-
-## 🧠 Coding Agents Progress
-
-* [x] T01. Establish Solution and Project Skeleton
-* [x] T02. Define the Public API Contracts
-* [x] T03. Implement Core Stream Execution Model
-* [x] T04. Implement Core Single Execution Model
-* [x] T05. Implement Fundamental Transformation Operators
-* [x] T06. Implement Flattening Semantics
-* [x] T07. Implement Aggregation and Combination Operators
-* [x] T08. Implement Concurrency and Backpressure
-* [x] T09. Implement Buffer and Window Operators
-* [x] T10. Implement Time-Based and Resilience Operators
-* [x] T11. Implement Error Recovery APIs
-* [x] T12. Implement Hot Stream Support
-* [x] T13. Implement Interop with `IAsyncEnumerable<T>` and AsyncRx.NET
-* [x] T14. Implement Scheduler / Execution Control
-* [x] T15. Add Documentation Examples as Executable Tests
-* [x] T16. Package Quality, Diagnostics, and Developer Experience
-* [x] T17. Performance and Resource-Safety Validation
 
 ---
 
