@@ -68,7 +68,6 @@ public class HotStreamTests
     }
 
     [Test]
-    [Ignore("Again getting stuck")]
     public async Task RefCount_AutomaticallyConnectsAndDisconnects()
     {
         var started = new TaskCompletionSource();
@@ -293,7 +292,8 @@ public class HotStreamTests
     {
         int executionCount = 0;
         var source = Stream.From(GenerateItems());
-        var shared = source.Replay(2).RefCount();
+        var connectable = source.Replay(2);
+        var shared = connectable.RefCount();
 
         async IAsyncEnumerable<int> GenerateItems()
         {
@@ -306,9 +306,13 @@ public class HotStreamTests
         var results1 = new List<int>();
         await shared.ForEachAsync(results1.Add);
         Assert.That(results1, Is.EquivalentTo(new[] { 1, 2, 3 }));
+        Assert.That(executionCount, Is.EqualTo(1));
+
+        // Wait for RefCount to fully disconnect before second subscription
+        // This ensures the second subscription will trigger a new execution
+        await connectable.WhenRefCountDisconnectedAsync();
 
         // Second subscriber joins after first finished and disconnected
-        // Because RefCount disconnected, it should restart execution, and since it's a new Connect(), buffer is cleared.
         var results2 = new List<int>();
         await shared.ForEachAsync(results2.Add);
 

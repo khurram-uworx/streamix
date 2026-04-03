@@ -4,16 +4,17 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Streamix Contributors</Authors>
     <Company>uWorx</Company>
-    <Description>Streamix Extensions</Description>
+    <Description>A lightweight, fluent, async-first streaming library for .NET.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/khurram-uworx/streamix</RepositoryUrl>
     <PackageTags>stream;reactive;async;linq;backpressure</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);162</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

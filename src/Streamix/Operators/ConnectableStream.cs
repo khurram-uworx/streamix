@@ -36,6 +36,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     CancellationTokenSource? cts;
     Task? connectionTask;
     IDisposable? autoConnection;
+    TaskCompletionSource<bool>? refCountDisconnectedTcs;
 
     public ConnectableStream(IStream<T> source, int bufferSize = 0, IClock? clock = null)
     {
@@ -234,9 +235,27 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
                     {
                         autoConnection?.Dispose();
                         autoConnection = null;
+                        refCountDisconnectedTcs?.TrySetResult(true);
+                        refCountDisconnectedTcs = null;
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Returns a task that completes when all RefCount subscribers have disconnected.
+    /// This is useful for testing RefCount behavior without relying on timing assumptions.
+    /// </summary>
+    public Task WhenRefCountDisconnectedAsync()
+    {
+        lock (_lock)
+        {
+            if (refCounter == 0)
+                return Task.CompletedTask;
+
+            refCountDisconnectedTcs = new TaskCompletionSource<bool>();
+            return refCountDisconnectedTcs.Task;
         }
     }
 
