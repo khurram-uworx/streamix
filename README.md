@@ -212,6 +212,16 @@ stream
 
 ---
 
+## 🚀 Performance Guardrails & Characteristics
+
+Streamix is designed for high-performance asynchronous streaming with the following characteristics:
+
+- **Backpressure by Design**: Concurrent operators like `FlatMap`, `Merge`, and `ParallelMap` utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unbounded memory growth.
+- **Zero-Allocation Sequential Operators**: Basic operators like `Map`, `Filter`, `Take`, and `Skip` are implemented as thin wrappers over `IAsyncEnumerable<T>` using async iterators. They introduce minimal overhead and do not involve intermediate buffering.
+- **Bounded Concurrency**: All flattening and parallel operators accept a `maxConcurrency` parameter, allowing you to strictly control the number of simultaneous asynchronous operations.
+- **Materialization Awareness**: Operators that require state across multiple items, such as `Buffer(count)`, `Window(count)`, or `Replay(bufferSize)`, involve allocations proportional to their requested size. These should be used with appropriate bounds to manage memory usage.
+- **Hot Stream Efficiency**: `ConnectableStream<T>` (via `Publish()` or `Replay()`) manages a single underlying subscription for multiple downstream consumers, reducing redundant upstream work and resource consumption.
+
 ## 🎯 When to Use
 
 * High-throughput async pipelines
