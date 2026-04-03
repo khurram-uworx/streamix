@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 namespace Streamix.Abstractions;
 
 /// <summary>
@@ -190,13 +192,6 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Delay(TimeSpan interval);
 
     /// <summary>
-    /// Cancels the stream when the specified token is cancelled.
-    /// </summary>
-    /// <param name="token">The cancellation token to monitor.</param>
-    /// <returns>A <see cref="IStream{T}"/> that monitors the specified token.</returns>
-    IStream<T> CancelOn(CancellationToken token);
-
-    /// <summary>
     /// Retries a stream if it fails, up to a specified number of times.
     /// </summary>
     /// <param name="retryCount">The number of times to retry.</param>
@@ -236,12 +231,6 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// </summary>
     /// <returns>An <see cref="IConnectableStream{T}"/>.</returns>
     IConnectableStream<T> Publish();
-
-    /// <summary>
-    /// Shares the source stream among multiple subscribers. This is a shortcut for <c>Publish().RefCount()</c>.
-    /// </summary>
-    /// <returns>An <see cref="IStream{T}"/>.</returns>
-    IStream<T> Share();
 
     /// <summary>
     /// Executes upstream operations (including source enumeration) on the specified scheduler.
@@ -287,4 +276,14 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <param name="onTerminate">The action to execute.</param>
     /// <returns>The same stream.</returns>
     IStream<T> DoOnTerminate(Action onTerminate);
+
+    /// <summary>
+    /// Terminal operation that writes all items of the stream to the specified <see cref="ChannelWriter{T}"/>.
+    /// Supports backpressure: if the channel is bounded and full, this method will asynchronously wait for space to become available.
+    /// </summary>
+    /// <param name="writer">The channel writer to write items to.</param>
+    /// <param name="completeWriter">Whether to complete the writer when the stream completes (either successfully or with an error).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when all items have been written to the channel.</returns>
+    Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default);
 }

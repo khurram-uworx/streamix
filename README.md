@@ -96,7 +96,6 @@ var hot  = cold.Publish().RefCount(); // shared hot stream
 * `Merge` / `Zip`
 * `Buffer` / `Window`
 * `Throttle` / `Delay`
-* `CancelOn`
 * `Retry` / `Timeout`
 * `Take` / `Skip`
 * `FirstAsync` / `LastAsync` / `SingleAsync` (and `OrDefault` variants)
@@ -156,6 +155,18 @@ IAsyncObservable<int> obs = stream.ToAsyncObservable();
 
 ```csharp
 Stream<int> stream = Stream.From(asyncEnumerable);
+```
+
+### Channel Interop
+
+```csharp
+// Create a stream from a Channel
+var channel = Channel.CreateUnbounded<int>();
+IStream<int> stream = Stream.FromChannel(channel);
+
+// Write a stream to a Channel
+// This supports backpressure naturally.
+await stream.ToChannel(channel.Writer, completeWriter: true);
 ```
 
 ---

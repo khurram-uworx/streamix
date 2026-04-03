@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Streamix.Abstractions;
+using System.Threading.Channels;
 
 namespace Streamix.Tests;
 
@@ -144,45 +145,101 @@ public class StreamTests
     }
 
     [Test]
-    public void CancelOn_Explicitly_Cancels_Stream()
+    public async Task FromChannel_Reads_All_Items()
     {
-        var cts = new CancellationTokenSource();
-        var stream = Stream.Range(1, 100).CancelOn(cts.Token);
+        var channel = Channel.CreateUnbounded<int>();
+        await channel.Writer.WriteAsync(1);
+        await channel.Writer.WriteAsync(2);
+        channel.Writer.Complete();
 
-        cts.Cancel();
+        var stream = Stream.FromChannel(channel);
+        var result = await stream.ToListAsync();
 
-        Assert.ThrowsAsync<OperationCanceledException>(async () =>
-        {
-            await foreach (var item in stream)
-            {
-            }
-        });
+        Assert.That(result, Is.EqualTo(new[] { 1, 2 }));
     }
 
     [Test]
-    public void CancelOn_Links_Multiple_Tokens()
+    public void FromChannel_Propagates_Error()
     {
-        var cts1 = new CancellationTokenSource();
-        var cts2 = new CancellationTokenSource();
-        var stream = Stream.Range(1, 100).CancelOn(cts1.Token);
+        var channel = Channel.CreateUnbounded<int>();
+        channel.Writer.TryComplete(new InvalidOperationException("Channel Error"));
 
-        // Cancel via second token during enumeration
-        Assert.ThrowsAsync<OperationCanceledException>(async () =>
-        {
-            await foreach (var item in stream.WithCancellation(cts2.Token))
-            {
-                if (item == 5) cts2.Cancel();
-            }
-        });
+        var stream = Stream.FromChannel(channel);
 
-        // Cancel via first token
-        cts1.Cancel();
-        var cts3 = new CancellationTokenSource();
-        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
+
+    [Test]
+    public async Task ToChannel_Writes_All_Items()
+    {
+        var channel = Channel.CreateUnbounded<int>();
+        var stream = Stream.Range(1, 3);
+
+        await stream.ToChannel(channel.Writer);
+
+        var result = new List<int>();
+        await foreach (var item in channel.Reader.ReadAllAsync())
         {
-            await foreach (var item in stream.WithCancellation(cts3.Token))
-            {
-            }
-        });
+            result.Add(item);
+        }
+
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public async Task ToChannel_Supports_Backpressure()
+    {
+        var channel = Channel.CreateBounded<int>(1);
+        var stream = Stream.Range(1, 3);
+
+        var toChannelTask = stream.ToChannel(channel.Writer);
+
+        // It should be waiting for space
+        await Task.Delay(100);
+        Assert.That(toChannelTask.IsCompleted, Is.False);
+
+        Assert.That(await channel.Reader.ReadAsync(), Is.EqualTo(1));
+        Assert.That(await channel.Reader.ReadAsync(), Is.EqualTo(2));
+        Assert.That(await channel.Reader.ReadAsync(), Is.EqualTo(3));
+
+        await toChannelTask;
+        Assert.That(channel.Reader.Completion.IsCompleted, Is.True);
+    }
+
+    [Test]
+    public async Task ToChannel_Propagates_Error()
+    {
+        async IAsyncEnumerable<int> Source()
+        {
+            yield return 1;
+            throw new InvalidOperationException("Stream Error");
+        }
+
+        var channel = Channel.CreateUnbounded<int>();
+        var stream = Stream.From(Source());
+
+        try
+        {
+            await stream.ToChannel(channel.Writer);
+            Assert.Fail("ToChannel should have thrown.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Assert.That(ex.Message, Is.EqualTo("Stream Error"));
+        }
+    }
+
+    [Test]
+    public async Task ToChannel_Does_Not_Complete_Writer_If_Requested()
+    {
+        var channel = Channel.CreateUnbounded<int>();
+        var stream = Stream.Range(1, 3);
+
+        await stream.ToChannel(channel.Writer, completeWriter: false);
+
+        Assert.That(channel.Reader.Completion.IsCompleted, Is.False);
+
+        channel.Writer.Complete();
+        await channel.Reader.Completion;
     }
 }
