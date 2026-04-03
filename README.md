@@ -98,6 +98,8 @@ var hot  = cold.Publish().RefCount(); // shared hot stream
 * `Throttle` / `Delay`
 * `Retry` / `Timeout`
 * `Take` / `Skip`
+* `FirstAsync` / `LastAsync` / `SingleAsync` (and `OrDefault` variants)
+* `AggregateAsync` / `CountAsync` / `AnyAsync` / `AllAsync`
 
 ---
 

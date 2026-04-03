@@ -606,4 +606,57 @@ public static class TerminalExtensions
 
         return sum / count;
     }
+
+    /// <summary>
+    /// Returns the only item from the stream, or throws if the stream does not contain exactly one item.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the only item from the stream.</returns>
+    /// <exception cref="InvalidOperationException">The stream is empty or contains more than one item.</exception>
+    public static async Task<T> SingleAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
+            first = item;
+            hasValue = true;
+        }
+
+        if (!hasValue)
+            throw new InvalidOperationException("Sequence contains no elements.");
+
+        return first!;
+    }
+
+    /// <summary>
+    /// Returns the only item from the stream, or a default value if the stream is empty. Throws if the stream contains more than one item.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the only item from the stream, or the default value of T if empty.</returns>
+    /// <exception cref="InvalidOperationException">The stream contains more than one item.</exception>
+    public static async Task<T?> SingleOrDefaultAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
+            first = item;
+            hasValue = true;
+        }
+
+        return first;
+    }
 }

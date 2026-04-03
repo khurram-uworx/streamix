@@ -236,4 +236,58 @@ public class AggregationOperatorTests
 
         Assert.That(result, Is.EqualTo(new[] { 11, 13 }));
     }
+
+    [Test]
+    public async Task SingleAsync_Returns_Element_When_One_Element_Exists()
+    {
+        var result = await Stream.Range(1, 1).SingleAsync(); // Just 1
+        Assert.That(result, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void SingleAsync_Throws_When_Empty()
+    {
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Stream.Empty<int>().SingleAsync());
+        Assert.That(ex?.Message, Is.EqualTo("Sequence contains no elements."));
+    }
+
+    [Test]
+    public void SingleAsync_Throws_When_Multiple_Elements()
+    {
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Stream.Range(1, 2).SingleAsync()); // 1, 2
+        Assert.That(ex?.Message, Is.EqualTo("Sequence contains more than one element."));
+    }
+
+    [Test]
+    public async Task SingleOrDefaultAsync_Returns_Element_When_One_Element_Exists()
+    {
+        var result = await Stream.Range(1, 1).SingleOrDefaultAsync();
+        Assert.That(result, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task SingleOrDefaultAsync_Returns_Default_When_Empty()
+    {
+        var result = await Stream.Empty<int>().SingleOrDefaultAsync();
+        Assert.That(result, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void SingleOrDefaultAsync_Throws_When_Multiple_Elements()
+    {
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Stream.Range(1, 2).SingleOrDefaultAsync());
+        Assert.That(ex?.Message, Is.EqualTo("Sequence contains more than one element."));
+    }
+
+    [Test]
+    public void SingleAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+            await Stream.Range(1, 1).SingleAsync(cts.Token));
+    }
 }

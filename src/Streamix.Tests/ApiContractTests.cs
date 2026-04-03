@@ -43,6 +43,18 @@ public class ApiContractTests
         Assert.That(type.GetMethod("Publish"), Is.Not.Null);
         Assert.That(type.GetMethod("RunOn"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "ForEachAsync"), Is.True);
+
+        // Terminal extensions (LINQ style)
+        var extensionsType = typeof(TerminalExtensions);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "FirstAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "FirstOrDefaultAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "LastAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "LastOrDefaultAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "SingleAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "SingleOrDefaultAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "CountAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "AnyAsync"), Is.True);
+        Assert.That(extensionsType.GetMethods().Any(m => m.Name == "AllAsync"), Is.True);
     }
 
     [Test]
