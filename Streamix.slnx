@@ -1,4 +1,14 @@
 <Solution>
+  <Folder Name="/.github/">
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
+  <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/IDEA.md" />
+    <File Path="docs/VARIETY.md" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />
