@@ -172,4 +172,145 @@ public class ResilienceOperatorTests
         await task;
         Assert.That(results, Has.Count.EqualTo(2));
     }
+
+    [Test]
+    public async Task Retry_WithBackoff_ShouldWaitBetweenAttempts()
+    {
+        var callCount = 0;
+        async IAsyncEnumerable<int> Source()
+        {
+            callCount++;
+            if (callCount < 3)
+            {
+                throw new InvalidOperationException($"Attempt {callCount} failed");
+            }
+            yield return 42;
+        }
+
+        var source = Stream.From(Source(), clock);
+        var backoffStrategyCalls = new List<(int Attempt, Exception Ex)>();
+        var retried = source.Retry(2, (attempt, ex) =>
+        {
+            backoffStrategyCalls.Add((attempt, ex));
+            return TimeSpan.FromSeconds(attempt);
+        });
+
+        var results = new List<int>();
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in retried)
+            {
+                results.Add(item);
+            }
+        });
+
+        // First attempt fails immediately.
+        // Then it schedules the first backoff delay (1s)
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(backoffStrategyCalls, Has.Count.EqualTo(1));
+        Assert.That(backoffStrategyCalls[0].Attempt, Is.EqualTo(1));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(1.1));
+
+        // Second attempt fails.
+        // We wait for the second backoff delay (2s)
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(backoffStrategyCalls, Has.Count.EqualTo(2));
+        Assert.That(backoffStrategyCalls[1].Attempt, Is.EqualTo(2));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(2.1));
+
+        // Third attempt succeeds
+        await task;
+        Assert.That(callCount, Is.EqualTo(3));
+        Assert.That(results, Is.EquivalentTo(new[] { 42 }));
+    }
+
+    [Test]
+    public async Task Single_Retry_WithBackoff_ShouldWaitBetweenAttempts()
+    {
+        var callCount = 0;
+        async IAsyncEnumerable<int> Source()
+        {
+            callCount++;
+            if (callCount < 3)
+            {
+                throw new InvalidOperationException($"Attempt {callCount} failed");
+            }
+            yield return 42;
+        }
+
+        var source = Single.From(Source(), clock);
+        var retried = source.Retry(2, (attempt, ex) => TimeSpan.FromSeconds(attempt));
+
+        var task = retried.ToTask();
+
+        // First attempt fails, waiting for 1s
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(1.1));
+
+        // Second attempt fails, waiting for 2s
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(2.1));
+
+        // Third attempt succeeds
+        var result = await task;
+        Assert.That(callCount, Is.EqualTo(3));
+        Assert.That(result, Is.EqualTo(42));
+    }
+
+    [Test]
+    public async Task Retry_WithBackoff_ShouldPropagateFinalException()
+    {
+        var callCount = 0;
+        async IAsyncEnumerable<int> Source()
+        {
+            callCount++;
+            throw new InvalidOperationException($"Persistent failure {callCount}");
+            yield break;
+        }
+
+        var source = Stream.From(Source());
+        var retried = source.Retry(2, (attempt, ex) => TimeSpan.FromMilliseconds(10));
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var item in retried) { }
+        });
+
+        Assert.That(ex.Message, Is.EqualTo("Persistent failure 3"));
+        Assert.That(callCount, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void Retry_WithBackoff_ShouldBeCancellableDuringDelay()
+    {
+        async IAsyncEnumerable<int> Source()
+        {
+            throw new InvalidOperationException("Failed");
+            yield break;
+        }
+
+        var cts = new CancellationTokenSource();
+        var source = Stream.From(Source(), clock);
+        var retried = source.Retry(5, (attempt, ex) => TimeSpan.FromSeconds(10));
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in retried.WithCancellation(cts.Token)) { }
+        });
+
+        // Wait for the first delay to be scheduled
+        var waitTask = clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        if (Task.WhenAny(waitTask, Task.Delay(2000)).Result != waitTask)
+        {
+            Assert.Fail("Timed out waiting for delay to be scheduled");
+        }
+
+        cts.Cancel();
+
+        Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
+    }
 }

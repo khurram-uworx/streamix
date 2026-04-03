@@ -35,7 +35,7 @@ public class ApiContractTests
         Assert.That(type.GetMethod("Window"), Is.Not.Null);
         Assert.That(type.GetMethod("Throttle"), Is.Not.Null);
         Assert.That(type.GetMethod("Delay"), Is.Not.Null);
-        Assert.That(type.GetMethod("Retry"), Is.Not.Null);
+        Assert.That(type.GetMethods().Any(m => m.Name == "Retry"), Is.True);
         Assert.That(type.GetMethod("Timeout"), Is.Not.Null);
         Assert.That(type.GetMethod("OnErrorResume"), Is.Not.Null);
         Assert.That(type.GetMethod("OnErrorReturn"), Is.Not.Null);
@@ -75,6 +75,7 @@ public class ApiContractTests
         Assert.That(type.GetMethod("OnErrorMap"), Is.Not.Null);
         Assert.That(type.GetMethod("RunOn"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "ForEachAsync"), Is.True);
+        Assert.That(type.GetMethods().Any(m => m.Name == "Retry"), Is.True);
         Assert.That(type.GetMethod("ToTask"), Is.Not.Null);
     }
 

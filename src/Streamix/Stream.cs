@@ -62,7 +62,10 @@ public sealed class Stream<T> : IStream<T>
             var t1 = e1.MoveNextAsync();
             var t2 = e2.MoveNextAsync();
 
-            if (!await t1 || !await t2)
+            var h1 = await t1;
+            var h2 = await t2;
+
+            if (!h1 || !h2)
                 yield break;
 
             yield return resultSelector(e1.Current, e2.Current);
@@ -762,51 +765,78 @@ public sealed class Stream<T> : IStream<T>
         }
     }
 
-    async IAsyncEnumerable<T> retry(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<T> retry(int retryCount, Func<int, Exception, TimeSpan>? backoffStrategy = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int attempts = 0;
         while (true)
         {
             bool failed = false;
             IAsyncEnumerator<T>? enumerator = null;
+            Exception? lastException = null;
             try
             {
                 enumerator = source.GetAsyncEnumerator(cancellationToken);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                if (attempts >= retryCount) throw;
+                lastException = ex;
+            }
+
+            if (enumerator != null)
+            {
+                await using (enumerator)
+                {
+                    while (true)
+                    {
+                        T current = default!;
+                        bool hasNext;
+                        try
+                        {
+                            hasNext = await enumerator.MoveNextAsync();
+                            if (hasNext) current = enumerator.Current;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastException = ex;
+                            failed = true;
+                            break;
+                        }
+
+                        if (hasNext)
+                            yield return current;
+                        else
+                        {
+                            yield break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                failed = true;
+            }
+
+            if (failed)
+            {
                 attempts++;
+                if (attempts > retryCount)
+                {
+                    if (lastException != null) throw lastException;
+                    yield break;
+                }
+
+                if (backoffStrategy != null && lastException != null)
+                {
+                    var delay = backoffStrategy(attempts, lastException);
+                    if (delay > TimeSpan.Zero)
+                    {
+                        await clock.Delay(delay, cancellationToken);
+                    }
+                }
                 continue;
             }
 
-            await using (enumerator)
-            {
-                while (true)
-                {
-                    T current = default!;
-                    bool hasNext;
-                    try
-                    {
-                        hasNext = await enumerator.MoveNextAsync();
-                        if (hasNext) current = enumerator.Current;
-                    }
-                    catch (Exception)
-                    {
-                        if (attempts >= retryCount) throw;
-                        attempts++;
-                        failed = true;
-                        break;
-                    }
-
-                    if (hasNext)
-                        yield return current;
-                    else
-                        break;
-                }
-            }
-
-            if (!failed) yield break;
+            yield break;
         }
     }
 
@@ -907,6 +937,12 @@ public sealed class Stream<T> : IStream<T>
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         return source.GetAsyncEnumerator(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
+    {
+        return Stream.From(retry(retryCount, backoffStrategy), clock);
     }
 
     /// <inheritdoc />

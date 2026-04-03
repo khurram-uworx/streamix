@@ -140,55 +140,81 @@ public sealed class Single<T> : ISingle<T>
         }
     }
 
-    async IAsyncEnumerable<T> retry(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<T> retry(int retryCount, Func<int, Exception, TimeSpan>? backoffStrategy = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int attempts = 0;
         while (true)
         {
             bool failed = false;
             IAsyncEnumerator<T>? enumerator = null;
+            Exception? lastException = null;
             try
             {
                 enumerator = source.GetAsyncEnumerator(cancellationToken);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                if (attempts >= retryCount) throw;
+                lastException = ex;
+            }
+
+            if (enumerator != null)
+            {
+                await using (enumerator)
+                {
+                    while (true)
+                    {
+                        T current = default!;
+                        bool hasNext;
+                        try
+                        {
+                            hasNext = await enumerator.MoveNextAsync();
+                            if (hasNext) current = enumerator.Current;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastException = ex;
+                            failed = true;
+                            break;
+                        }
+
+                        if (hasNext)
+                        {
+                            yield return current;
+                            yield break; // Single should only emit one item
+                        }
+                        else
+                        {
+                            yield break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                failed = true;
+            }
+
+            if (failed)
+            {
                 attempts++;
+                if (attempts > retryCount)
+                {
+                    if (lastException != null) throw lastException;
+                    yield break;
+                }
+
+                if (backoffStrategy != null && lastException != null)
+                {
+                    var delay = backoffStrategy(attempts, lastException);
+                    if (delay > TimeSpan.Zero)
+                    {
+                        await clock.Delay(delay, cancellationToken);
+                    }
+                }
                 continue;
             }
 
-            await using (enumerator)
-            {
-                while (true)
-                {
-                    T current = default!;
-                    bool hasNext;
-                    try
-                    {
-                        hasNext = await enumerator.MoveNextAsync();
-                        if (hasNext) current = enumerator.Current;
-                    }
-                    catch (Exception)
-                    {
-                        if (attempts >= retryCount) throw;
-                        attempts++;
-                        failed = true;
-                        break;
-                    }
-
-                    if (hasNext)
-                    {
-                        yield return current;
-                        yield break; // Single should only emit one item
-                    }
-                    else
-                        yield break;
-                }
-            }
-
-            if (!failed)
-                yield break;
+            yield break;
         }
     }
 
@@ -289,6 +315,12 @@ public sealed class Single<T> : ISingle<T>
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         return source.GetAsyncEnumerator(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
+    {
+        return Single.From(retry(retryCount, backoffStrategy), clock);
     }
 
     /// <inheritdoc />

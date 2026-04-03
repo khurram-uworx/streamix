@@ -122,6 +122,14 @@ public interface ISingle<T> : IAsyncEnumerable<T>
     ISingle<T> Retry(int retryCount = 1);
 
     /// <summary>
+    /// Retries a single-item stream if it fails, up to a specified number of times, with a backoff strategy.
+    /// </summary>
+    /// <param name="retryCount">The number of times to retry.</param>
+    /// <param name="backoffStrategy">A function that computes the delay before the next retry attempt based on the attempt number (1-based) and the exception that caused the failure.</param>
+    /// <returns>A retrying <see cref="ISingle{T}"/> with backoff.</returns>
+    ISingle<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy);
+
+    /// <summary>
     /// Terminates a single-item stream with a <see cref="TimeoutException"/> if it doesn't emit an element within a specified time interval.
     /// </summary>
     /// <param name="interval">The maximum time interval before an element is emitted.</param>

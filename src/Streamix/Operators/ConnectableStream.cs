@@ -25,6 +25,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     }
 
     readonly IStream<T> source;
+    readonly IClock clock;
     readonly ConcurrentDictionary<Guid, Channel<T>> subscribers = new();
     readonly object _lock = new();
     int refCounter = 0;
@@ -32,9 +33,10 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     Task? connectionTask;
     IDisposable? autoConnection;
 
-    public ConnectableStream(IStream<T> source)
+    public ConnectableStream(IStream<T> source, IClock? clock = null)
     {
         this.source = source;
+        this.clock = clock ?? (source is Stream<T> s ? s.Clock : Streamix.Concurrency.SystemClock.Instance);
     }
 
     async Task runConnectionInternal(CancellationToken token)
@@ -179,9 +181,9 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             {
                 refCounter++;
                 incremented = true;
+                enumerator = this.GetAsyncEnumerator(cancellationToken);
                 if (refCounter == 1)
                     autoConnection = Connect();
-                enumerator = this.GetAsyncEnumerator(cancellationToken);
             }
 
             while (await enumerator.MoveNextAsync())
@@ -632,17 +634,16 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
 
     async IAsyncEnumerable<T> throttle(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var lastEmit = DateTime.UtcNow;
+        DateTimeOffset? nextAllowedEmission = null;
+
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
-            var now = DateTime.UtcNow;
-            var timeSinceLastEmit = now - lastEmit;
-
-            if (timeSinceLastEmit < interval)
-                await Task.Delay(interval - timeSinceLastEmit, cancellationToken);
-
-            yield return item;
-            lastEmit = DateTime.UtcNow;
+            var now = clock.Now;
+            if (nextAllowedEmission == null || now >= nextAllowedEmission.Value)
+            {
+                yield return item;
+                nextAllowedEmission = now + interval;
+            }
         }
     }
 
@@ -650,31 +651,31 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
-            await Task.Delay(interval, cancellationToken);
+            await clock.Delay(interval, cancellationToken);
             yield return item;
         }
     }
 
-    async IAsyncEnumerable<T> retry(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<T> retry(int retryCount, Func<int, Exception, TimeSpan>? backoffStrategy = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int attempts = 0;
         while (true)
         {
             bool failed = false;
             IAsyncEnumerator<T>? enumerator = null;
+            Exception? lastException = null;
             try
             {
-                try
-                {
-                    enumerator = this.GetAsyncEnumerator(cancellationToken);
-                }
-                catch (Exception)
-                {
-                    if (attempts >= retryCount) throw;
-                    attempts++;
-                    continue;
-                }
+                enumerator = this.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+                failed = true;
+            }
 
+            if (enumerator != null)
+            {
                 await using (enumerator)
                 {
                     while (true)
@@ -686,10 +687,9 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
                             hasNext = await enumerator.MoveNextAsync();
                             if (hasNext) current = enumerator.Current;
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            if (attempts >= retryCount) throw;
-                            attempts++;
+                            lastException = ex;
                             failed = true;
                             break;
                         }
@@ -697,14 +697,34 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
                         if (hasNext)
                             yield return current;
                         else
-                            break;
+                        {
+                            yield break;
+                        }
                     }
                 }
             }
-            finally
-            { }
 
-            if (!failed) yield break;
+            if (failed)
+            {
+                attempts++;
+                if (attempts > retryCount)
+                {
+                    if (lastException != null) throw lastException;
+                    yield break;
+                }
+
+                if (backoffStrategy != null && lastException != null)
+                {
+                    var delay = backoffStrategy(attempts, lastException);
+                    if (delay > TimeSpan.Zero)
+                    {
+                        await clock.Delay(delay, cancellationToken);
+                    }
+                }
+                continue;
+            }
+
+            yield break;
         }
     }
 
@@ -716,7 +736,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
         {
             var moveNextTask = enumerator.MoveNextAsync().AsTask();
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var timeoutTask = Task.Delay(interval, timeoutCts.Token);
+            var timeoutTask = clock.Delay(interval, timeoutCts.Token);
 
             try
             {
@@ -984,9 +1004,15 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
+    {
+        return Stream.From(retry(retryCount, backoffStrategy), clock);
+    }
+
+    /// <inheritdoc />
     public IStream<TResult> MapAwait<TResult>(Func<T, ValueTask<TResult>> selector)
     {
-        return Stream.From(mapAwait(selector));
+        return Stream.From(mapAwait(selector), clock);
     }
 
     /// <inheritdoc />
@@ -1007,20 +1033,20 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> FilterAwait(Func<T, ValueTask<bool>> predicate)
     {
-        return Stream.From(filterAwait(predicate));
+        return Stream.From(filterAwait(predicate), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> RefCount()
     {
-        return Stream.From(refCount());
+        return Stream.From(refCount(), clock);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector, int maxConcurrency = 1)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapAwaitConcurrent(selector, maxConcurrency));
+        return Stream.From(flatMapAwaitConcurrent(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
@@ -1034,16 +1060,21 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     public IStream<TResult> ParallelMapOrdered<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(parallelMapOrdered(selector, maxConcurrency));
+        return Stream.From(parallelMapOrdered(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
-    public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         var id = Guid.NewGuid();
         var channel = Channel.CreateUnbounded<T>();
         subscribers.TryAdd(id, channel);
 
+        return getAsyncEnumeratorImpl(id, channel, cancellationToken);
+    }
+
+    async IAsyncEnumerator<T> getAsyncEnumeratorImpl(Guid id, Channel<T> channel, CancellationToken cancellationToken)
+    {
         try
         {
             while (await channel.Reader.WaitToReadAsync(cancellationToken))
@@ -1062,7 +1093,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<TResult> Map<TResult>(Func<T, TResult> selector)
     {
-        return Stream.From(map(selector));
+        return Stream.From(map(selector), clock);
     }
 
     /// <inheritdoc />
@@ -1071,7 +1102,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> Filter(Func<T, bool> predicate)
     {
-        return Stream.From(filter(predicate));
+        return Stream.From(filter(predicate), clock);
     }
 
     /// <inheritdoc />
@@ -1082,15 +1113,15 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         return maxConcurrency == 1
-            ? Stream.From(flatMap(selector))
-            : Stream.From(flatMapManyConcurrent(selector, maxConcurrency));
+            ? Stream.From(flatMap(selector), clock)
+            : Stream.From(flatMapManyConcurrent(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = 1)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapConcurrent(selector, maxConcurrency));
+        return Stream.From(flatMapConcurrent(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
@@ -1101,93 +1132,93 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         return maxConcurrency == 1
-            ? Stream.From(flatMapMany(selector))
-            : Stream.From(flatMapManyConcurrentMany(selector, maxConcurrency));
+            ? Stream.From(flatMapMany(selector), clock)
+            : Stream.From(flatMapManyConcurrentMany(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMapManyAwait<TResult>(Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency = 1)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapManyAwaitConcurrent(selector, maxConcurrency));
+        return Stream.From(flatMapManyAwaitConcurrent(selector, maxConcurrency), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Take(int count)
     {
-        return Stream.From(take(count));
+        return Stream.From(take(count), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Skip(int count)
     {
-        return Stream.From(skip(count));
+        return Stream.From(skip(count), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> MergeWith(params IStream<T>[] others)
     {
-        return Stream.From(mergeWith(others));
+        return Stream.From(mergeWith(others), clock);
     }
 
     /// <inheritdoc />
     public IStream<TResult> ZipWith<TOther, TResult>(IStream<TOther> other, Func<T, TOther, TResult> resultSelector)
     {
-        return Stream.From(zipWith(other, resultSelector));
+        return Stream.From(zipWith(other, resultSelector), clock);
     }
 
     /// <inheritdoc />
     public IStream<IList<T>> Buffer(int count)
     {
-        return Stream.From(buffer(count));
+        return Stream.From(buffer(count), clock);
     }
 
     /// <inheritdoc />
     public IStream<IStream<T>> Window(int count)
     {
-        return Stream.From(window(count));
+        return Stream.From(window(count), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Throttle(TimeSpan interval)
     {
-        return Stream.From(throttle(interval));
+        return Stream.From(throttle(interval), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Delay(TimeSpan interval)
     {
-        return Stream.From(delay(interval));
+        return Stream.From(delay(interval), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Retry(int retryCount = 1)
     {
-        return Stream.From(retry(retryCount));
+        return Stream.From(retry(retryCount), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> Timeout(TimeSpan interval)
     {
-        return Stream.From(timeout(interval));
+        return Stream.From(timeout(interval), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler)
     {
-        return Stream.From(onErrorResume(errorHandler));
+        return Stream.From(onErrorResume(errorHandler), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorReturn(T value)
     {
-        return Stream.From(onErrorReturn(value));
+        return Stream.From(onErrorReturn(value), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorMap(Func<Exception, Exception> mapper)
     {
-        return Stream.From(onErrorMap(mapper));
+        return Stream.From(onErrorMap(mapper), clock);
     }
 
     /// <inheritdoc />
@@ -1196,7 +1227,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> RunOn(TaskScheduler scheduler)
     {
-        return Stream.From(runOn(scheduler));
+        return Stream.From(runOn(scheduler), clock);
     }
 
     /// <inheritdoc />
@@ -1214,7 +1245,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> DoOnNext(Action<T> onNext)
     {
-        return Stream.From(doOnNext(onNext));
+        return Stream.From(doOnNext(onNext), clock);
     }
 
     /// <inheritdoc />
@@ -1226,19 +1257,19 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> DoOnError(Action<Exception> onError)
     {
-        return Stream.From(doOnError(onError));
+        return Stream.From(doOnError(onError), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> DoOnComplete(Action onComplete)
     {
-        return Stream.From(doOnComplete(onComplete));
+        return Stream.From(doOnComplete(onComplete), clock);
     }
 
     /// <inheritdoc />
     public IStream<T> DoOnTerminate(Action onTerminate)
     {
-        return Stream.From(doOnTerminate(onTerminate));
+        return Stream.From(doOnTerminate(onTerminate), clock);
     }
 
     /// <inheritdoc />

@@ -199,6 +199,14 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Retry(int retryCount = 1);
 
     /// <summary>
+    /// Retries a stream if it fails, up to a specified number of times, with a backoff strategy.
+    /// </summary>
+    /// <param name="retryCount">The number of times to retry.</param>
+    /// <param name="backoffStrategy">A function that computes the delay before the next retry attempt based on the attempt number (1-based) and the exception that caused the failure.</param>
+    /// <returns>A retrying <see cref="IStream{T}"/> with backoff.</returns>
+    IStream<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy);
+
+    /// <summary>
     /// Terminates a stream with a <see cref="TimeoutException"/> if it doesn't emit an element within a specified time interval.
     /// </summary>
     /// <param name="interval">The maximum time interval between elements.</param>
