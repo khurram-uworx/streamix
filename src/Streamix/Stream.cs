@@ -1099,6 +1099,9 @@ public sealed class Stream<T> : IStream<T>
     public IConnectableStream<T> Publish() => new Streamix.Operators.ConnectableStream<T>(this);
 
     /// <inheritdoc />
+    public IStream<T> Share() => Publish().RefCount();
+
+    /// <inheritdoc />
     public IStream<T> RunOn(TaskScheduler scheduler)
     {
         return Stream.From(runOn(scheduler), clock);

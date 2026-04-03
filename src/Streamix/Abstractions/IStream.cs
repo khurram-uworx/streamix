@@ -231,6 +231,12 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IConnectableStream<T> Publish();
 
     /// <summary>
+    /// Shares the source stream among multiple subscribers. This is a shortcut for <c>Publish().RefCount()</c>.
+    /// </summary>
+    /// <returns>An <see cref="IStream{T}"/>.</returns>
+    IStream<T> Share();
+
+    /// <summary>
     /// Executes upstream operations (including source enumeration) on the specified scheduler.
     /// This is equivalent to SubscribeOn in other reactive libraries.
     /// </summary>

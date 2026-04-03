@@ -212,4 +212,47 @@ public class HotStreamTests
             Assert.That(results2, Is.EquivalentTo(new[] { 1, 2, 3 }));
         }
     }
+
+    [Test]
+    public async Task Share_IsEquivalentToPublishRefCount()
+    {
+        var started = new TaskCompletionSource();
+        var continueSignal = new TaskCompletionSource();
+        int executionCount = 0;
+
+        async IAsyncEnumerable<int> GenerateItems()
+        {
+            executionCount++;
+            if (!started.Task.IsCompleted)
+                started.SetResult();
+
+            yield return 1;
+            await continueSignal.Task;
+            yield return 2;
+        }
+
+        var source = Stream.From(GenerateItems());
+        var shared = source.Share();
+
+        // First execution with two concurrent subscribers
+        var results1 = new List<int>();
+        var results2 = new List<int>();
+
+        var t1 = shared.ForEachAsync(results1.Add);
+        await started.Task;
+        var t2 = shared.ForEachAsync(results2.Add);
+        continueSignal.SetResult();
+        await Task.WhenAll(t1, t2);
+
+        Assert.That(executionCount, Is.EqualTo(1));
+        Assert.That(results1, Is.EquivalentTo(new[] { 1, 2 }));
+        Assert.That(results2, Is.Not.Empty);
+
+        // Third subscriber after both have disconnected should trigger a new execution
+        var results3 = new List<int>();
+        await shared.ForEachAsync(results3.Add);
+
+        Assert.That(executionCount, Is.EqualTo(2));
+        Assert.That(results3, Is.EquivalentTo(new[] { 1, 2 }));
+    }
 }
