@@ -1,4 +1,5 @@
 using Streamix.Abstractions;
+using System.Diagnostics;
 
 namespace Streamix.Tests;
 
@@ -38,8 +39,8 @@ public sealed class TestClock : IClock
 
     public async Task WaitForDelay(int count, TimeSpan timeout)
     {
-        var start = DateTime.UtcNow;
-        while (DateTime.UtcNow - start < timeout)
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
         {
             Task waiterTask;
             lock (delays)
@@ -49,7 +50,18 @@ public sealed class TestClock : IClock
                 waiters.Add(tcs);
                 waiterTask = tcs.Task;
             }
-            await Task.WhenAny(waiterTask, Task.Delay(100));
+
+            var remainingTimeout = timeout - sw.Elapsed;
+            var delayMs = Math.Min(100, (int)remainingTimeout.TotalMilliseconds + 1);
+            if (delayMs <= 0) break;
+
+            await Task.WhenAny(waiterTask, Task.Delay(delayMs));
+
+            // Check again after awaiting, in case condition is now met
+            lock (delays)
+            {
+                if (delays.Count >= count) return;
+            }
         }
         lock (delays)
         {
