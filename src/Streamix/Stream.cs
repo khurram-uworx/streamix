@@ -893,6 +893,14 @@ public sealed class Stream<T> : IStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> doOnComplete(Action onComplete, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+            yield return item;
+
+        onComplete();
+    }
+
     internal IClock Clock => clock;
 
     /// <inheritdoc />
@@ -1125,9 +1133,21 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> Do(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
+    public IStream<T> Tap(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
     public IStream<T> DoOnError(Action<Exception> onError)
     {
         return Stream.From(doOnError(onError), clock);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> DoOnComplete(Action onComplete)
+    {
+        return Stream.From(doOnComplete(onComplete), clock);
     }
 
     /// <inheritdoc />

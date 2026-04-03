@@ -130,20 +130,45 @@ public interface ISingle<T> : IAsyncEnumerable<T>
 
     /// <summary>
     /// Executes an action for the element of the stream without modifying it.
+    /// This operator does not catch exceptions thrown by the action.
     /// </summary>
     /// <param name="onNext">The action to execute for the element.</param>
     /// <returns>The same single-item stream.</returns>
     ISingle<T> DoOnNext(Action<T> onNext);
 
     /// <summary>
+    /// Alias for <see cref="DoOnNext(Action{T})"/>.
+    /// </summary>
+    /// <param name="onNext">The action to execute for the element.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Do(Action<T> onNext);
+
+    /// <summary>
+    /// Alias for <see cref="DoOnNext(Action{T})"/>.
+    /// </summary>
+    /// <param name="onNext">The action to execute for the element.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Tap(Action<T> onNext);
+
+    /// <summary>
     /// Executes an action when the single-item stream fails.
+    /// This hook does not fire if the single-item stream is cancelled or completes successfully.
     /// </summary>
     /// <param name="onError">The action to execute with the exception.</param>
     /// <returns>The same single-item stream.</returns>
     ISingle<T> DoOnError(Action<Exception> onError);
 
     /// <summary>
+    /// Executes an action when the single-item stream completes successfully.
+    /// This hook does not fire if an error occurs or the stream is cancelled.
+    /// </summary>
+    /// <param name="onComplete">The action to execute.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> DoOnComplete(Action onComplete);
+
+    /// <summary>
     /// Executes an action when the single-item stream terminates (either successfully or with an error).
+    /// This hook also fires if the stream is cancelled during enumeration.
     /// </summary>
     /// <param name="onTerminate">The action to execute.</param>
     /// <returns>The same single-item stream.</returns>

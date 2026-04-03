@@ -275,6 +275,14 @@ public sealed class Single<T> : ISingle<T>
         }
     }
 
+    async IAsyncEnumerable<T> doOnComplete(Action onComplete, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in source.WithCancellation(ct))
+            yield return item;
+
+        onComplete();
+    }
+
     internal IClock Clock => clock;
 
     /// <inheritdoc />
@@ -367,11 +375,17 @@ public sealed class Single<T> : ISingle<T>
     /// <inheritdoc />
     public async Task<T> ToTask(CancellationToken cancellationToken = default)
     {
+        T result = default!;
+        bool hasValue = false;
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
-            return item;
+            if (!hasValue)
+            {
+                result = item;
+                hasValue = true;
+            }
         }
-        return default!;
+        return result;
     }
 
     /// <inheritdoc />
@@ -393,9 +407,21 @@ public sealed class Single<T> : ISingle<T>
     }
 
     /// <inheritdoc />
+    public ISingle<T> Do(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
+    public ISingle<T> Tap(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
     public ISingle<T> DoOnError(Action<Exception> onError)
     {
         return new Single<T>(doOnError(onError), clock);
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> DoOnComplete(Action onComplete)
+    {
+        return new Single<T>(doOnComplete(onComplete), clock);
     }
 
     /// <inheritdoc />
@@ -410,14 +436,9 @@ public sealed class Single<T> : ISingle<T>
 /// </summary>
 public static class Single
 {
-    static async IAsyncEnumerable<T> toAsyncEnumerable<T>(T value)
+    static async IAsyncEnumerable<TValue> toAsyncEnumerableFromTask<TValue>(Task<TValue> task, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        yield return value;
-    }
-
-    static async IAsyncEnumerable<T> toAsyncEnumerable<T>(Task<T> task)
-    {
-        yield return await task;
+        yield return await task.WaitAsync(ct);
     }
 
     /// <summary>
@@ -439,7 +460,7 @@ public static class Single
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="value">The value to emit.</param>
     /// <returns>A single-item stream that emits the specified value and then completes.</returns>
-    public static ISingle<T> From<T>(T value) => From(toAsyncEnumerable(value));
+    public static ISingle<T> From<T>(T value) => From(AsyncEnumerableInternal.Just(value));
 
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a <see cref="Task{T}"/>.
@@ -447,7 +468,7 @@ public static class Single
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="task">The task to wrap.</param>
     /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
-    public static ISingle<T> From<T>(Task<T> task) => From(toAsyncEnumerable(task));
+    public static ISingle<T> From<T>(Task<T> task) => From(toAsyncEnumerableFromTask(task));
 
     /// <summary>
     /// Creates an empty <see cref="ISingle{T}"/>.
@@ -470,6 +491,11 @@ static class AsyncEnumerableInternal
     public static async IAsyncEnumerable<T> Empty<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield break;
+    }
+
+    public static async IAsyncEnumerable<T> Just<T>(T value, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        yield return value;
     }
 
     public static async IAsyncEnumerable<T> Error<T>(Exception exception, [EnumeratorCancellation] CancellationToken cancellationToken = default)
