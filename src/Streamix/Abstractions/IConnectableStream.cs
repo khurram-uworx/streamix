@@ -16,4 +16,10 @@ public interface IConnectableStream<T> : IStream<T>
     /// Returns a stream that stays connected as long as there is at least one subscriber.
     /// </summary>
     IStream<T> RefCount();
+
+    /// <summary>
+    /// Returns a task that completes when all RefCount subscribers have disconnected.
+    /// This is useful for testing RefCount behavior without relying on timing assumptions.
+    /// </summary>
+    Task WhenRefCountDisconnectedAsync();
 }
