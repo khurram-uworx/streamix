@@ -184,4 +184,84 @@ public class ResourceSafetyTests
 
         Assert.That(source.DisposeCount, Is.EqualTo(1), "Source should be disposed now");
     }
+
+    [Test]
+    public async Task ParallelMap_CancelsOutstandingTasks_OnCancellation()
+    {
+        var taskStarted = 0;
+        var taskCancelled = 0;
+
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 10)
+            .ParallelMap(async x =>
+            {
+                Interlocked.Increment(ref taskStarted);
+                try
+                {
+                    await Task.Delay(1000, cts.Token);
+                    return x;
+                }
+                catch (OperationCanceledException)
+                {
+                    Interlocked.Increment(ref taskCancelled);
+                    throw;
+                }
+            }, maxConcurrency: 5);
+
+        var enumerator = stream.GetAsyncEnumerator(cts.Token);
+        var moveNextTask = enumerator.MoveNextAsync();
+
+        // Give some time for producer to start tasks
+        await Task.Delay(200);
+
+        await cts.CancelAsync();
+        try { await moveNextTask; } catch (OperationCanceledException) { }
+        await enumerator.DisposeAsync();
+
+        // Wait for background tasks to settle
+        await Task.Delay(500);
+
+        Assert.That(taskStarted, Is.GreaterThan(0));
+        Assert.That(taskCancelled, Is.EqualTo(taskStarted));
+    }
+
+    [Test]
+    public async Task ParallelMapOrdered_CancelsOutstandingTasks_OnCancellation()
+    {
+        var taskStarted = 0;
+        var taskCancelled = 0;
+
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 10)
+            .ParallelMapOrdered(async x =>
+            {
+                Interlocked.Increment(ref taskStarted);
+                try
+                {
+                    await Task.Delay(1000, cts.Token);
+                    return x;
+                }
+                catch (OperationCanceledException)
+                {
+                    Interlocked.Increment(ref taskCancelled);
+                    throw;
+                }
+            }, maxConcurrency: 5);
+
+        var enumerator = stream.GetAsyncEnumerator(cts.Token);
+        var moveNextTask = enumerator.MoveNextAsync();
+
+        // Give some time for producer to start tasks
+        await Task.Delay(200);
+
+        await cts.CancelAsync();
+        try { await moveNextTask; } catch (OperationCanceledException) { }
+        await enumerator.DisposeAsync();
+
+        // Wait for background tasks to settle
+        await Task.Delay(500);
+
+        Assert.That(taskStarted, Is.GreaterThan(0));
+        Assert.That(taskCancelled, Is.EqualTo(taskStarted));
+    }
 }

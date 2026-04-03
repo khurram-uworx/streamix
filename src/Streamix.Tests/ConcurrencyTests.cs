@@ -163,4 +163,105 @@ public class ConcurrencyTests
         Assert.That(result[0], Is.Not.EqualTo(1));
         Assert.That(result, Is.EquivalentTo(new[] { 1, 2, 3, 4, 5 }));
     }
+
+    [Test]
+    public async Task ParallelMap_RespectsMaxConcurrency()
+    {
+        const int maxConcurrency = 3;
+        int activeTasks = 0;
+        int maxObservedConcurrency = 0;
+        var lockObj = new object();
+
+        var result = await Stream.Range(1, 10)
+            .ParallelMap(async x =>
+            {
+                int currentActive = Interlocked.Increment(ref activeTasks);
+                lock (lockObj)
+                {
+                    maxObservedConcurrency = Math.Max(maxObservedConcurrency, currentActive);
+                }
+
+                await Task.Delay(50);
+
+                Interlocked.Decrement(ref activeTasks);
+                return x;
+            }, maxConcurrency: maxConcurrency)
+            .ToListAsync();
+
+        Assert.That(maxObservedConcurrency, Is.LessThanOrEqualTo(maxConcurrency));
+        Assert.That(result, Is.EquivalentTo(Enumerable.Range(1, 10)));
+    }
+
+    [Test]
+    public async Task ParallelMapOrdered_RespectsMaxConcurrency()
+    {
+        const int maxConcurrency = 3;
+        int activeTasks = 0;
+        int maxObservedConcurrency = 0;
+        var lockObj = new object();
+
+        var result = await Stream.Range(1, 10)
+            .ParallelMapOrdered(async x =>
+            {
+                int currentActive = Interlocked.Increment(ref activeTasks);
+                lock (lockObj)
+                {
+                    maxObservedConcurrency = Math.Max(maxObservedConcurrency, currentActive);
+                }
+
+                await Task.Delay(50);
+
+                Interlocked.Decrement(ref activeTasks);
+                return x;
+            }, maxConcurrency: maxConcurrency)
+            .ToListAsync();
+
+        Assert.That(maxObservedConcurrency, Is.LessThanOrEqualTo(maxConcurrency));
+        Assert.That(result, Is.EqualTo(Enumerable.Range(1, 10)));
+    }
+
+    [Test]
+    public async Task ParallelMapOrdered_PreservesOrder()
+    {
+        var result = await Stream.Range(1, 5)
+            .ParallelMapOrdered(async x =>
+            {
+                // Task for 1 takes 100ms, others take 1ms
+                await Task.Delay(x == 1 ? 100 : 1);
+                return x;
+            }, maxConcurrency: 5)
+            .ToListAsync();
+
+        // 1 SHOULD be first because it's ordered
+        Assert.That(result[0], Is.EqualTo(1));
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
+    public void ParallelMap_PropagatesErrorsCorrectly()
+    {
+        var stream = Stream.Range(1, 10)
+            .ParallelMap(async x =>
+            {
+                if (x == 5) throw new InvalidOperationException("Boom");
+                await Task.Yield();
+                return x;
+            }, maxConcurrency: 2);
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
+
+    [Test]
+    public void ParallelMapOrdered_PropagatesErrorsCorrectly()
+    {
+        var stream = Stream.Range(1, 10)
+            .ParallelMapOrdered(async x =>
+            {
+                if (x == 5) throw new InvalidOperationException("Boom");
+                await Task.Yield();
+                return x;
+            }, maxConcurrency: 2);
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
 }
