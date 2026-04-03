@@ -230,7 +230,6 @@ public class StreamTests
     }
 
     [Test]
-    [Ignore("Again getting stuck")]
     public async Task ToChannel_Does_Not_Complete_Writer_If_Requested()
     {
         var channel = Channel.CreateUnbounded<int>();
@@ -243,6 +242,7 @@ public class StreamTests
         channel.Writer.Complete();
         await foreach (var i in channel.Reader.ReadAllAsync()) //.GetAsyncEnumerator().DisposeAsync(); // Ensure reader is completed
         { }
+
         await channel.Reader.Completion;
     }
 }
