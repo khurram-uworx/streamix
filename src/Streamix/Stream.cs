@@ -17,53 +17,77 @@ public sealed class Stream<T> : IStream<T>
         if (streams == null || streams.Length == 0) yield break;
 
         var channel = Channel.CreateUnbounded<T>();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var tasks = new List<Task>();
 
-        foreach (var stream in streams)
+        try
         {
-            tasks.Add(Task.Run(async () =>
+            foreach (var stream in streams)
             {
-                try
+                tasks.Add(Task.Run(async () =>
                 {
-                    await foreach (var item in stream.WithCancellation(cancellationToken))
-                        await channel.Writer.WriteAsync(item, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    channel.Writer.TryComplete(ex);
-                    throw;
-                }
-            }, cancellationToken));
+                    try
+                    {
+                        await foreach (var item in stream.WithCancellation(cts.Token))
+                            await channel.Writer.WriteAsync(item, cts.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        channel.Writer.TryComplete(ex);
+                        throw;
+                    }
+                }, cts.Token));
+            }
+
+            _ = Task.WhenAll(tasks).ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    channel.Writer.TryComplete(t.Exception?.InnerException);
+                else
+                    channel.Writer.TryComplete();
+            }, TaskScheduler.Default);
+
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (channel.Reader.TryRead(out var item))
+                    yield return item;
+            }
+
+            await channel.Reader.Completion;
         }
-
-        _ = Task.WhenAll(tasks).ContinueWith(t =>
+        finally
         {
-            if (t.IsFaulted)
-                channel.Writer.TryComplete(t.Exception?.InnerException);
-            else
-                channel.Writer.TryComplete();
-        }, cancellationToken);
-
-        while (await channel.Reader.WaitToReadAsync(cancellationToken))
-            while (channel.Reader.TryRead(out var item))
-                yield return item;
-
-        // Ensure any exception that completed the channel is rethrown
-        await channel.Reader.Completion;
+            await cts.CancelAsync();
+            try { await Task.WhenAll(tasks); } catch { }
+        }
     }
 
     static async IAsyncEnumerable<TResult> zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await using var e1 = first.GetAsyncEnumerator(cancellationToken);
-        await using var e2 = second.GetAsyncEnumerator(cancellationToken);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        await using var e1 = first.GetAsyncEnumerator(cts.Token);
+        await using var e2 = second.GetAsyncEnumerator(cts.Token);
 
         while (true)
         {
-            var t1 = e1.MoveNextAsync();
-            var t2 = e2.MoveNextAsync();
+            var t1 = e1.MoveNextAsync().AsTask();
+            var t2 = e2.MoveNextAsync().AsTask();
+
+            try
+            {
+                await Task.WhenAll(t1, t2);
+            }
+            catch
+            {
+                await cts.CancelAsync();
+                throw;
+            }
 
             if (!await t1 || !await t2)
+            {
+                await cts.CancelAsync();
                 yield break;
+            }
 
             yield return resultSelector(e1.Current, e2.Current);
         }
@@ -674,6 +698,13 @@ public sealed class Stream<T> : IStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> cancelOn(CancellationToken token, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var linkedCts = CancellationHelper.Link(token, cancellationToken);
+        await foreach (var item in this.WithCancellation(linkedCts.Token))
+            yield return item;
+    }
+
     async IAsyncEnumerable<T> timeout(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await using var enumerator = this.GetAsyncEnumerator(cancellationToken);
@@ -1066,6 +1097,12 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> CancelOn(CancellationToken token)
+    {
+        return Stream.From(cancelOn(token), clock);
+    }
+
+    /// <inheritdoc />
     public IStream<T> Retry(int retryCount = 1)
     {
         return Stream.From(retry(retryCount), clock);
@@ -1096,7 +1133,10 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
-    public IConnectableStream<T> Publish() => new Streamix.Operators.ConnectableStream<T>(this);
+    public IConnectableStream<T> Publish() => new Streamix.Operators.ConnectableStream<T>(this, clock);
+
+    /// <inheritdoc />
+    public IStream<T> Share() => Publish().RefCount();
 
     /// <inheritdoc />
     public IStream<T> RunOn(TaskScheduler scheduler)

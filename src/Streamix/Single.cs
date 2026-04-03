@@ -140,6 +140,13 @@ public sealed class Single<T> : ISingle<T>
         }
     }
 
+    async IAsyncEnumerable<T> cancelOn(CancellationToken token, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var linkedCts = CancellationHelper.Link(token, cancellationToken);
+        await foreach (var item in this.WithCancellation(linkedCts.Token))
+            yield return item;
+    }
+
     async IAsyncEnumerable<T> retry(int retryCount, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         int attempts = 0;
@@ -372,6 +379,12 @@ public sealed class Single<T> : ISingle<T>
             return item;
         }
         return default!;
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> CancelOn(CancellationToken token)
+    {
+        return Single.From(cancelOn(token), clock);
     }
 
     /// <inheritdoc />

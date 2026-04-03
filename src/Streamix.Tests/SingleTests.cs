@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Streamix.Abstractions;
+using System.Runtime.CompilerServices;
 
 namespace Streamix.Tests;
 
@@ -177,5 +178,59 @@ public class SingleTests
             result.Add(item);
         }
         Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public void CancelOn_Explicitly_Cancels_Single()
+    {
+        var cts = new CancellationTokenSource();
+        async IAsyncEnumerable<int> DelayedSource([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.Delay(1000, ct);
+            yield return 1;
+        }
+
+        ISingle<int> single = Single.From(DelayedSource()).CancelOn(cts.Token);
+        cts.Cancel();
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in single)
+            {
+            }
+        });
+    }
+
+    [Test]
+    public void CancelOn_Links_Multiple_Tokens()
+    {
+        var cts1 = new CancellationTokenSource();
+        var cts2 = new CancellationTokenSource();
+        async IAsyncEnumerable<int> DelayedSource([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.Delay(1000, ct);
+            yield return 1;
+        }
+
+        ISingle<int> single = Single.From(DelayedSource()).CancelOn(cts1.Token);
+
+        // Cancel via second token
+        cts2.Cancel();
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in single.WithCancellation(cts2.Token))
+            {
+            }
+        });
+
+        // Cancel via first token
+        cts1.Cancel();
+        var cts3 = new CancellationTokenSource();
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in single.WithCancellation(cts3.Token))
+            {
+            }
+        });
     }
 }

@@ -241,5 +241,45 @@ public class StreamTests
 
         channel.Writer.Complete();
         await channel.Reader.Completion;
+    public void CancelOn_Explicitly_Cancels_Stream()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).CancelOn(cts.Token);
+
+        cts.Cancel();
+
+        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in stream)
+            {
+            }
+        });
+    }
+
+    [Test]
+    public void CancelOn_Links_Multiple_Tokens()
+    {
+        var cts1 = new CancellationTokenSource();
+        var cts2 = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).CancelOn(cts1.Token);
+
+        // Cancel via second token during enumeration
+        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in stream.WithCancellation(cts2.Token))
+            {
+                if (item == 5) cts2.Cancel();
+            }
+        });
+
+        // Cancel via first token
+        cts1.Cancel();
+        var cts3 = new CancellationTokenSource();
+        Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in stream.WithCancellation(cts3.Token))
+            {
+            }
+        });
     }
 }

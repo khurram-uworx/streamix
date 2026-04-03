@@ -264,4 +264,41 @@ public class ConcurrencyTests
 
         Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
     }
+
+    [Test]
+    public async Task FlatMap_Concurrent_CancelOn_Stops_Production()
+    {
+        var cts = new CancellationTokenSource();
+        var pulledItems = new List<int>();
+
+        async IAsyncEnumerable<int> Source([EnumeratorCancellation] CancellationToken ct = default)
+        {
+            for (int i = 1; i <= 100; i++)
+            {
+                pulledItems.Add(i);
+                yield return i;
+                await Task.Delay(10, ct);
+            }
+        }
+
+        var stream = Stream.From(Source())
+            .FlatMap(async x =>
+            {
+                await Task.Delay(50);
+                return x;
+            }, maxConcurrency: 2)
+            .CancelOn(cts.Token);
+
+        var enumerator = stream.GetAsyncEnumerator();
+        await enumerator.MoveNextAsync();
+
+        await cts.CancelAsync();
+
+        try { await enumerator.MoveNextAsync(); } catch (OperationCanceledException) { }
+
+        var countAfterCancel = pulledItems.Count;
+        await Task.Delay(200);
+
+        Assert.That(pulledItems.Count, Is.LessThanOrEqualTo(countAfterCancel + 2), "Production should have stopped promptly");
+    }
 }

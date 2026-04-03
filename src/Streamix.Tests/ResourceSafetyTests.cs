@@ -226,6 +226,75 @@ public class ResourceSafetyTests
     }
 
     [Test]
+    public async Task Merge_DisposesAllSources_OnExplicitCancelOn()
+    {
+        var s1 = new DisposableSource(100);
+        var s2 = new DisposableSource(100);
+
+        var cts = new CancellationTokenSource();
+        var merged = Stream.Merge(Stream.From((IAsyncEnumerable<int>)s1), Stream.From((IAsyncEnumerable<int>)s2))
+            .CancelOn(cts.Token);
+
+        int count = 0;
+        try
+        {
+            await foreach (var item in merged)
+            {
+                count++;
+                if (count == 5) await cts.CancelAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+
+        // Wait for background tasks to settle
+        await Task.Delay(500);
+
+        Assert.That(s1.DisposeCount, Is.EqualTo(1), "Source 1 should be disposed");
+        Assert.That(s2.DisposeCount, Is.EqualTo(1), "Source 2 should be disposed");
+    }
+
+    [Test]
+    public async Task FlatMap_CancelsOutstandingTasks_OnExplicitCancelOn()
+    {
+        var taskStarted = 0;
+        var taskCancelled = 0;
+
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 10)
+            .FlatMap(async x =>
+            {
+                Interlocked.Increment(ref taskStarted);
+                try
+                {
+                    await Task.Delay(1000, cts.Token);
+                    return x;
+                }
+                catch (OperationCanceledException)
+                {
+                    Interlocked.Increment(ref taskCancelled);
+                    throw;
+                }
+            }, maxConcurrency: 5)
+            .CancelOn(cts.Token);
+
+        var enumerator = stream.GetAsyncEnumerator();
+        var moveNextTask = enumerator.MoveNextAsync();
+
+        // Give some time for producer to start tasks
+        await Task.Delay(200);
+
+        await cts.CancelAsync();
+        try { await moveNextTask; } catch (OperationCanceledException) { }
+        await enumerator.DisposeAsync();
+
+        // Wait for background tasks to settle
+        await Task.Delay(500);
+
+        Assert.That(taskStarted, Is.GreaterThan(0));
+        Assert.That(taskCancelled, Is.EqualTo(taskStarted));
+    }
+
+    [Test]
     public async Task ParallelMapOrdered_CancelsOutstandingTasks_OnCancellation()
     {
         var taskStarted = 0;
