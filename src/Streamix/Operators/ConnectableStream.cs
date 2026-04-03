@@ -28,14 +28,20 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     readonly IClock clock;
     readonly ConcurrentDictionary<Guid, Channel<T>> subscribers = new();
     readonly object _lock = new();
+    readonly int replayBufferSize;
+    readonly Queue<T> replayBuffer = new();
+    bool isCompleted;
+    Exception? error;
     int refCounter = 0;
     CancellationTokenSource? cts;
     Task? connectionTask;
     IDisposable? autoConnection;
 
-    public ConnectableStream(IStream<T> source, IClock? clock = null)
+    public ConnectableStream(IStream<T> source, int bufferSize = 0, IClock? clock = null)
     {
+        if (bufferSize < 0) throw new ArgumentOutOfRangeException(nameof(bufferSize), "Buffer size must be non-negative.");
         this.source = source;
+        this.replayBufferSize = bufferSize;
         this.clock = clock ?? (source is Stream<T> s ? s.Clock : Streamix.Concurrency.SystemClock.Instance);
     }
 
@@ -53,9 +59,20 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             while (await enumerator.MoveNextAsync())
             {
                 var item = enumerator.Current;
-                var subscribers = this.subscribers.Values.ToArray();
+                Channel<T>[] currentSubscribers;
 
-                foreach (var subscriber in subscribers)
+                lock (_lock)
+                {
+                    if (replayBufferSize > 0)
+                    {
+                        replayBuffer.Enqueue(item);
+                        while (replayBuffer.Count > replayBufferSize)
+                            replayBuffer.Dequeue();
+                    }
+                    currentSubscribers = this.subscribers.Values.ToArray();
+                }
+
+                foreach (var subscriber in currentSubscribers)
                 {
                     try
                     {
@@ -65,21 +82,34 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
                 }
             }
 
-            var finalSubscribers = subscribers.Values.ToArray();
-            foreach (var subscriber in finalSubscribers)
-                subscriber.Writer.TryComplete();
+            lock (_lock)
+            {
+                isCompleted = true;
+                var finalSubscribers = subscribers.Values.ToArray();
+                foreach (var subscriber in finalSubscribers)
+                    subscriber.Writer.TryComplete();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            var finalSubscribers = subscribers.Values.ToArray();
-            foreach (var subscriber in finalSubscribers)
-                subscriber.Writer.TryComplete();
+            lock (_lock)
+            {
+                isCompleted = true;
+                var finalSubscribers = subscribers.Values.ToArray();
+                foreach (var subscriber in finalSubscribers)
+                    subscriber.Writer.TryComplete();
+            }
         }
         catch (Exception ex)
         {
-            var finalSubscribers = subscribers.Values.ToArray();
-            foreach (var subscriber in finalSubscribers)
-                subscriber.Writer.TryComplete(ex);
+            lock (_lock)
+            {
+                isCompleted = true;
+                error = ex;
+                var finalSubscribers = subscribers.Values.ToArray();
+                foreach (var subscriber in finalSubscribers)
+                    subscriber.Writer.TryComplete(ex);
+            }
         }
         finally
         {
@@ -181,9 +211,9 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             {
                 refCounter++;
                 incremented = true;
-                enumerator = this.GetAsyncEnumerator(cancellationToken);
                 if (refCounter == 1)
                     autoConnection = Connect();
+                enumerator = this.GetAsyncEnumerator(cancellationToken);
             }
 
             while (await enumerator.MoveNextAsync())
@@ -1023,6 +1053,10 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
             if (connectionTask != null && !connectionTask.IsCompleted)
                 return new ConnectionDisposable(this);
 
+            replayBuffer.Clear();
+            isCompleted = false;
+            error = null;
+
             cts = new CancellationTokenSource();
             var token = cts.Token;
             connectionTask = runConnectionInternal(token);
@@ -1068,7 +1102,24 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     {
         var id = Guid.NewGuid();
         var channel = Channel.CreateUnbounded<T>();
-        subscribers.TryAdd(id, channel);
+
+        lock (_lock)
+        {
+            if (replayBufferSize > 0)
+            {
+                foreach (var item in replayBuffer)
+                    channel.Writer.TryWrite(item);
+            }
+
+            if (isCompleted)
+            {
+                channel.Writer.TryComplete(error);
+            }
+            else
+            {
+                subscribers.TryAdd(id, channel);
+            }
+        }
 
         return getAsyncEnumeratorImpl(id, channel, cancellationToken);
     }
@@ -1223,6 +1274,9 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
 
     /// <inheritdoc />
     public IConnectableStream<T> Publish() => this;
+
+    /// <inheritdoc />
+    public IConnectableStream<T> Replay(int bufferSize) => new ConnectableStream<T>(this, bufferSize);
 
     /// <inheritdoc />
     public IStream<T> RunOn(TaskScheduler scheduler)

@@ -213,4 +213,106 @@ public class HotStreamTests
             Assert.That(results2, Is.EquivalentTo(new[] { 1, 2, 3 }));
         }
     }
+
+    [Test]
+    public async Task Replay_LateSubscriber_ReceivesBufferedItems()
+    {
+        var tcs = new TaskCompletionSource();
+        var source = Stream.From(GenerateItems());
+        var hot = source.Replay(2);
+
+        async IAsyncEnumerable<int> GenerateItems()
+        {
+            yield return 1;
+            yield return 2;
+            yield return 3;
+            await tcs.Task;
+            yield return 4;
+        }
+
+        using (hot.Connect())
+        {
+            await Task.Delay(50); // Let first 3 items be produced
+
+            var results = new List<int>();
+            var t = hot.ForEachAsync(results.Add);
+
+            tcs.SetResult();
+            await t;
+
+            // Buffer size is 2, so should receive 2, 3 (buffered) and 4 (new)
+            Assert.That(results, Is.EquivalentTo(new[] { 2, 3, 4 }));
+        }
+    }
+
+    [Test]
+    public async Task Replay_LateSubscriber_ReceivesCompletion()
+    {
+        var source = Stream.From(new[] { 1, 2, 3 }.ToAsyncEnumerable());
+        var hot = source.Replay(2);
+
+        using (hot.Connect())
+        {
+            await Task.Delay(50); // Wait for completion
+
+            var results = new List<int>();
+            await hot.ForEachAsync(results.Add);
+
+            // Should receive last 2 items from buffer
+            Assert.That(results, Is.EquivalentTo(new[] { 2, 3 }));
+        }
+    }
+
+    [Test]
+    public async Task Replay_LateSubscriber_ReceivesError()
+    {
+        var source = Stream.From(GenerateItems());
+        var hot = source.Replay(2);
+
+        async IAsyncEnumerable<int> GenerateItems()
+        {
+            yield return 1;
+            yield return 2;
+            throw new InvalidOperationException("Failed");
+        }
+
+        using (hot.Connect())
+        {
+            await Task.Delay(50); // Wait for failure
+
+            var results = new List<int>();
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await hot.ForEachAsync(results.Add));
+
+            // Should receive buffered items before the error
+            Assert.That(results, Is.EquivalentTo(new[] { 1, 2 }));
+        }
+    }
+
+    [Test]
+    public async Task Replay_RefCount_WorksCorrectly()
+    {
+        int executionCount = 0;
+        var source = Stream.From(GenerateItems());
+        var shared = source.Replay(2).RefCount();
+
+        async IAsyncEnumerable<int> GenerateItems()
+        {
+            executionCount++;
+            yield return 1;
+            yield return 2;
+            yield return 3;
+        }
+
+        var results1 = new List<int>();
+        await shared.ForEachAsync(results1.Add);
+        Assert.That(results1, Is.EquivalentTo(new[] { 1, 2, 3 }));
+
+        // Second subscriber joins after first finished and disconnected
+        // Because RefCount disconnected, it should restart execution, and since it's a new Connect(), buffer is cleared.
+        var results2 = new List<int>();
+        await shared.ForEachAsync(results2.Add);
+
+        Assert.That(executionCount, Is.EqualTo(2));
+        Assert.That(results2, Is.EquivalentTo(new[] { 1, 2, 3 }));
+    }
 }
