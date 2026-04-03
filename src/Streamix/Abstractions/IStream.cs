@@ -241,6 +241,13 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IConnectableStream<T> Publish();
 
     /// <summary>
+    /// Shares the source stream among multiple subscribers and replays the last <paramref name="bufferSize"/> elements to late subscribers.
+    /// </summary>
+    /// <param name="bufferSize">The maximum number of elements to replay to late subscribers.</param>
+    /// <returns>An <see cref="IConnectableStream{T}"/>.</returns>
+    IConnectableStream<T> Replay(int bufferSize);
+
+    /// <summary>
     /// Executes upstream operations (including source enumeration) on the specified scheduler.
     /// This is equivalent to SubscribeOn in other reactive libraries.
     /// </summary>
