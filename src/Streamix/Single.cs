@@ -473,6 +473,28 @@ public static class Single
         yield return await task.WaitAsync(ct);
     }
 
+    static async IAsyncEnumerable<TValue> toAsyncEnumerableFromTaskFunc<TValue>(Func<Task<TValue>> taskFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return await taskFactory().WaitAsync(ct);
+    }
+
+    static async IAsyncEnumerable<TValue> toAsyncEnumerableFromTaskFuncWithCt<TValue>(Func<CancellationToken, Task<TValue>> taskFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return await taskFactory(ct).WaitAsync(ct);
+    }
+
+    static async IAsyncEnumerable<TValue> defer<TValue>(Func<ISingle<TValue>> factory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in factory().WithCancellation(ct))
+            yield return item;
+    }
+
+    static async IAsyncEnumerable<TValue> deferWithCt<TValue>(Func<CancellationToken, ISingle<TValue>> factory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in factory(ct).WithCancellation(ct))
+            yield return item;
+    }
+
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
@@ -503,6 +525,24 @@ public static class Single
     public static ISingle<T> From<T>(Task<T> task) => From(toAsyncEnumerableFromTask(task));
 
     /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a function that returns a <see cref="Task{T}"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
+    public static ISingle<T> From<T>(Func<Task<T>> taskFactory) => From(toAsyncEnumerableFromTaskFunc(taskFactory));
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a function that returns a <see cref="Task{T}"/> and accepts a <see cref="CancellationToken"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
+    public static ISingle<T> From<T>(Func<CancellationToken, Task<T>> taskFactory) => From(toAsyncEnumerableFromTaskFuncWithCt(taskFactory));
+
+    /// <summary>
     /// Creates an empty <see cref="ISingle{T}"/>.
     /// </summary>
     /// <typeparam name="T">The type of item in the stream.</typeparam>
@@ -516,6 +556,24 @@ public static class Single
     /// <param name="exception">The exception to fail with.</param>
     /// <returns>A failing single-item stream.</returns>
     public static ISingle<T> Error<T>(Exception exception) => From(AsyncEnumerableInternal.Error<T>(exception));
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> by invoking a factory function for each subscription.
+    /// This is used to defer the creation of the single-item stream until it is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="factory">The factory function to invoke.</param>
+    /// <returns>A single-item stream that is created lazily for each subscriber.</returns>
+    public static ISingle<T> Defer<T>(Func<ISingle<T>> factory) => From(defer(factory));
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> by invoking a factory function that accepts a <see cref="CancellationToken"/> for each subscription.
+    /// This is used to defer the creation of the single-item stream until it is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="factory">The factory function to invoke.</param>
+    /// <returns>A single-item stream that is created lazily for each subscriber.</returns>
+    public static ISingle<T> Defer<T>(Func<CancellationToken, ISingle<T>> factory) => From(deferWithCt(factory));
 }
 
 static class AsyncEnumerableInternal
