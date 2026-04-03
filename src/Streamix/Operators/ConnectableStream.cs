@@ -955,6 +955,14 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> doOnComplete(Action onComplete, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in this.WithCancellation(cancellationToken))
+            yield return item;
+
+        onComplete();
+    }
+
     async Task forEachAsync(Action<T> action, CancellationToken cancellationToken)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
@@ -1210,9 +1218,21 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> Do(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
+    public IStream<T> Tap(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
     public IStream<T> DoOnError(Action<Exception> onError)
     {
         return Stream.From(doOnError(onError));
+    }
+
+    /// <inheritdoc />
+    public IStream<T> DoOnComplete(Action onComplete)
+    {
+        return Stream.From(doOnComplete(onComplete));
     }
 
     /// <inheritdoc />

@@ -258,20 +258,45 @@ public interface IStream<T> : IAsyncEnumerable<T>
 
     /// <summary>
     /// Executes an action for each element of the stream without modifying it.
+    /// This operator does not catch exceptions thrown by the action.
     /// </summary>
     /// <param name="onNext">The action to execute for each element.</param>
     /// <returns>The same stream.</returns>
     IStream<T> DoOnNext(Action<T> onNext);
 
     /// <summary>
+    /// Alias for <see cref="DoOnNext(Action{T})"/>.
+    /// </summary>
+    /// <param name="onNext">The action to execute for each element.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Do(Action<T> onNext);
+
+    /// <summary>
+    /// Alias for <see cref="DoOnNext(Action{T})"/>.
+    /// </summary>
+    /// <param name="onNext">The action to execute for each element.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Tap(Action<T> onNext);
+
+    /// <summary>
     /// Executes an action when the stream fails.
+    /// This hook does not fire if the stream is cancelled or completes successfully.
     /// </summary>
     /// <param name="onError">The action to execute with the exception.</param>
     /// <returns>The same stream.</returns>
     IStream<T> DoOnError(Action<Exception> onError);
 
     /// <summary>
+    /// Executes an action when the stream completes successfully.
+    /// This hook does not fire if an error occurs or the stream is cancelled.
+    /// </summary>
+    /// <param name="onComplete">The action to execute.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> DoOnComplete(Action onComplete);
+
+    /// <summary>
     /// Executes an action when the stream terminates (either successfully or with an error).
+    /// This hook also fires if the stream is cancelled during enumeration.
     /// </summary>
     /// <param name="onTerminate">The action to execute.</param>
     /// <returns>The same stream.</returns>
