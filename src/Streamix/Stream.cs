@@ -1323,10 +1323,35 @@ public static class Stream
     /// <param name="resultSelector">The result selector function.</param>
     /// <returns>A zipped stream.</returns>
     public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector) => Stream<TResult>.Zip(first, second, resultSelector);
+
+    /// <summary>
+    /// Returns a stream that is created by a factory function for each subscriber.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="factory">The factory function to create the stream.</param>
+    /// <returns>A deferred stream.</returns>
+    public static IStream<T> Defer<T>(Func<IStream<T>> factory) => From(AsyncEnumerable.Defer<T>(_ => factory()));
+
+    /// <summary>
+    /// Returns a stream that is created by a factory function for each subscriber, with access to the subscriber's cancellation token.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="factory">The factory function to create the stream.</param>
+    /// <returns>A deferred stream.</returns>
+    public static IStream<T> Defer<T>(Func<CancellationToken, IStream<T>> factory) => From(AsyncEnumerable.Defer<T>(factory));
 }
 
 internal static class AsyncEnumerable
 {
+    public static async IAsyncEnumerable<T> Defer<T>(Func<CancellationToken, IStream<T>> factory, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var source = factory(cancellationToken);
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            yield return item;
+        }
+    }
+
     public static async IAsyncEnumerable<T> Empty<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield break;
