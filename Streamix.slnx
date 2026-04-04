@@ -6,10 +6,7 @@
     <File Path=".github/workflows/ci.yml" />
   </Folder>
   <Folder Name="/docs/">
-    <File Path="docs/CREATION.md" />
     <File Path="docs/IDEA.md" />
-    <File Path="docs/PROMPT.md" />
-    <File Path="docs/VARIETY.md" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
