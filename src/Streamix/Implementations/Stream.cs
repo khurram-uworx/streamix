@@ -930,6 +930,114 @@ public sealed class Stream<T> : IStream<T>
         onComplete();
     }
 
+    static async IAsyncEnumerable<T> create(Func<IStreamEmitter<T>, Task> producer, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var channel = Channel.CreateBounded<T>(1);
+        var emitter = new Emitter(channel.Writer, cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                await producer(emitter);
+                emitter.Complete();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                emitter.Complete();
+            }
+            catch (Exception ex)
+            {
+                emitter.Fail(ex);
+            }
+        }, cancellationToken);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                }
+            }
+
+            await channel.Reader.Completion;
+        }
+        finally
+        {
+            emitter.Cancel();
+            try { await producerTask; } catch { }
+            emitter.Dispose();
+        }
+    }
+
+    class Emitter : IStreamEmitter<T>, IDisposable
+    {
+        readonly ChannelWriter<T> writer;
+        readonly CancellationTokenSource cts;
+        int terminalState = 0; // 0: active, 1: terminal
+
+        public Emitter(ChannelWriter<T> writer, CancellationToken externalToken)
+        {
+            this.writer = writer;
+            this.cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
+        }
+
+        public CancellationToken CancellationToken => cts.Token;
+
+        public async ValueTask EmitAsync(T item)
+        {
+            if (Volatile.Read(ref terminalState) != 0 || cts.IsCancellationRequested)
+                throw new OperationCanceledException(cts.Token);
+
+            try
+            {
+                await writer.WriteAsync(item, cts.Token);
+            }
+            catch (ChannelClosedException)
+            {
+                // Ignore if channel is closed
+            }
+            catch (OperationCanceledException)
+            {
+                // Ignore if cancelled
+            }
+        }
+
+        public void Complete()
+        {
+            if (Interlocked.CompareExchange(ref terminalState, 1, 0) == 0)
+            {
+                writer.TryComplete();
+                cts.Cancel();
+            }
+        }
+
+        public void Fail(Exception error)
+        {
+            if (Interlocked.CompareExchange(ref terminalState, 1, 0) == 0)
+            {
+                writer.TryComplete(error);
+                cts.Cancel();
+            }
+        }
+
+        internal void Cancel()
+        {
+            if (Interlocked.Exchange(ref terminalState, 1) == 0)
+            {
+                writer.TryComplete();
+                cts.Cancel();
+            }
+        }
+
+        public void Dispose()
+        {
+            cts.Dispose();
+        }
+    }
+
     internal IClock Clock => clock;
 
     /// <inheritdoc />
@@ -1065,6 +1173,16 @@ public sealed class Stream<T> : IStream<T>
     public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector)
     {
         return Stream.From(zip(first, second, resultSelector));
+    }
+
+    /// <summary>
+    /// Creates a stream by providing an emitter that can be used to push items, complete, or signal errors.
+    /// </summary>
+    /// <param name="producer">A function that uses the emitter to produce items.</param>
+    /// <returns>A stream created from the emitter.</returns>
+    public static IStream<T> Create(Func<IStreamEmitter<T>, Task> producer)
+    {
+        return Stream.From(create(producer));
     }
 
     /// <inheritdoc />

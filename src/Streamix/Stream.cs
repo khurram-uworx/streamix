@@ -151,4 +151,12 @@ public static class Stream
     /// <param name="factory">The factory function to create the stream.</param>
     /// <returns>A deferred stream.</returns>
     public static IStream<T> Defer<T>(Func<CancellationToken, IStream<T>> factory) => From(AsyncEnumerable.Defer<T>(factory));
+
+    /// <summary>
+    /// Creates a stream by providing an emitter that can be used to push items, complete, or signal errors.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="producer">A function that uses the emitter to produce items.</param>
+    /// <returns>A stream created from the emitter.</returns>
+    public static IStream<T> Create<T>(Func<IStreamEmitter<T>, Task> producer) => Stream<T>.Create(producer);
 }
