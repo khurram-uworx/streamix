@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace Streamix.Abstractions;
+namespace Streamix;
 
 /// <summary>
 /// Represents a stream of 0..N values, backed by <see cref="IAsyncEnumerable{T}"/>.

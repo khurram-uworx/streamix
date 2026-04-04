@@ -1,6 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Streamix;
-using Streamix.Abstractions;
 
 namespace Streamix.Benchmarks;
 

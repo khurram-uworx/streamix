@@ -1,9 +1,8 @@
-using Streamix.Abstractions;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
-namespace Streamix.Operators;
+namespace Streamix.Implementations;
 
 /// <summary>
 /// Implementation of <see cref="IConnectableStream{T}"/> that allows multicasting a single source to multiple subscribers.

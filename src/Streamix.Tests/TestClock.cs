@@ -1,4 +1,3 @@
-using Streamix.Abstractions;
 using System.Diagnostics;
 
 namespace Streamix.Tests;

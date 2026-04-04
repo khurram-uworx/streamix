@@ -32,8 +32,6 @@ The default mental model is:
 * Represents a stream of 0..N values.
 
 ```csharp
-using Streamix.Abstractions;
-
 IStream<int> numbers = Stream.Range(1, 10);
 ````
 
@@ -41,8 +39,6 @@ IStream<int> numbers = Stream.Range(1, 10);
 * Represents a stream of 0..1 values.
 
 ```csharp
-using Streamix.Abstractions;
-
 ISingle<User> user = Single.From(GetUser(id));
 ```
 
@@ -189,8 +185,6 @@ var result = await Stream.Range(1, 10)
 ### `IAsyncEnumerable<T>`
 
 ```csharp
-using Streamix.Abstractions;
-
 IStream<int> stream = Stream.From(asyncEnumerable);
 ISingle<int> single = Single.From(task);
 ```
@@ -199,7 +193,6 @@ ISingle<int> single = Single.From(task);
 
 ```csharp
 using System.Threading.Channels;
-using Streamix.Abstractions;
 
 var channel = Channel.CreateUnbounded<int>();
 IStream<int> fromChannel = Stream.FromChannel(channel);

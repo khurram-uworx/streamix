@@ -1,8 +1,5 @@
 namespace Streamix;
 
-using Streamix.Abstractions;
-using System.Runtime.CompilerServices;
-
 /// <summary>
 /// Provides LINQ-style extension methods for <see cref="IStream{T}"/>.
 /// These extensions make it easy to work with streams using familiar LINQ patterns.

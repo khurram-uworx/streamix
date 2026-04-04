@@ -1,5 +1,3 @@
-using Streamix.Abstractions;
-
 namespace Streamix.Concurrency;
 
 /// <summary>
