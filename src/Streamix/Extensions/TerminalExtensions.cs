@@ -45,9 +45,22 @@ public static class TerminalExtensions
     /// <param name="stream">The source stream.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a hash set containing all items from the stream.</returns>
-    public static async Task<HashSet<T>> ToHashSetAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    public static Task<HashSet<T>> ToHashSetAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
-        var hashSet = new HashSet<T>();
+        return stream.ToHashSetAsync(null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a <see cref="HashSet{T}"/> using a specified comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{T}"/> to compare elements.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a hash set containing all items from the stream.</returns>
+    public static async Task<HashSet<T>> ToHashSetAsync<T>(this IStream<T> stream, IEqualityComparer<T>? comparer, CancellationToken cancellationToken = default)
+    {
+        var hashSet = new HashSet<T>(comparer);
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             hashSet.Add(item);
@@ -77,12 +90,27 @@ public static class TerminalExtensions
     /// <param name="keySelector">A function to extract the key from each item.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a dictionary with keys from the selector and values as stream items.</returns>
-    public static async Task<Dictionary<TKey, T>> ToDictionaryAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, CancellationToken cancellationToken = default) where TKey : notnull
+    public static Task<Dictionary<TKey, T>> ToDictionaryAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, CancellationToken cancellationToken = default) where TKey : notnull
     {
-        var dict = new Dictionary<TKey, T>();
+        return stream.ToDictionaryAsync(keySelector, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a dictionary using a key selector and specified comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a dictionary with keys from the selector and values as stream items.</returns>
+    public static async Task<Dictionary<TKey, T>> ToDictionaryAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default) where TKey : notnull
+    {
+        var dict = new Dictionary<TKey, T>(comparer);
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
-            dict[keySelector(item)] = item;
+            dict.Add(keySelector(item), item);
         }
         return dict;
     }
@@ -98,12 +126,29 @@ public static class TerminalExtensions
     /// <param name="valueSelector">A function to extract the value from each item.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a dictionary with selected keys and values.</returns>
-    public static async Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, CancellationToken cancellationToken = default) where TKey : notnull
+    public static Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, CancellationToken cancellationToken = default) where TKey : notnull
     {
-        var dict = new Dictionary<TKey, TValue>();
+        return stream.ToDictionaryAsync(keySelector, valueSelector, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a dictionary using key and value selectors and specified comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <typeparam name="TValue">The type of the value.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="valueSelector">A function to extract the value from each item.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a dictionary with selected keys and values.</returns>
+    public static async Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default) where TKey : notnull
+    {
+        var dict = new Dictionary<TKey, TValue>(comparer);
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
-            dict[keySelector(item)] = valueSelector(item);
+            dict.Add(keySelector(item), valueSelector(item));
         }
         return dict;
     }
@@ -128,6 +173,25 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Returns the first item from the stream that satisfies a condition, or throws if no such item is found.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the first matching item.</returns>
+    /// <exception cref="InvalidOperationException">No item matches the condition or the stream is empty.</exception>
+    public static async Task<T> FirstAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+                return item;
+        }
+        throw new InvalidOperationException("Sequence contains no matching element.");
+    }
+
+    /// <summary>
     /// Returns the first item from the stream, or a default value if the stream is empty.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -139,6 +203,24 @@ public static class TerminalExtensions
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             return item;
+        }
+        return default;
+    }
+
+    /// <summary>
+    /// Returns the first item from the stream that satisfies a condition, or a default value if no such item is found.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the first matching item, or the default value of T if none found.</returns>
+    public static async Task<T?> FirstOrDefaultAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+                return item;
         }
         return default;
     }
@@ -169,6 +251,35 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Returns the last item from the stream that satisfies a condition, or throws if no such item is found.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the last matching item.</returns>
+    /// <exception cref="InvalidOperationException">No item matches the condition or the stream is empty.</exception>
+    public static async Task<T> LastAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? last = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                last = item;
+                hasValue = true;
+            }
+        }
+
+        if (!hasValue)
+            throw new InvalidOperationException("Sequence contains no matching element.");
+
+        return last!;
+    }
+
+    /// <summary>
     /// Returns the last item from the stream, or a default value if the stream is empty.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -182,6 +293,29 @@ public static class TerminalExtensions
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             last = item;
+        }
+
+        return last;
+    }
+
+    /// <summary>
+    /// Returns the last item from the stream that satisfies a condition, or a default value if no such item is found.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the last matching item, or the default value of T if none found.</returns>
+    public static async Task<T?> LastOrDefaultAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? last = default;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                last = item;
+            }
         }
 
         return last;
@@ -633,6 +767,38 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Returns the only item from the stream that satisfies a condition, or throws if no such item exists or multiple items match.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the single matching item.</returns>
+    /// <exception cref="InvalidOperationException">No item matches the condition, or more than one item matches.</exception>
+    public static async Task<T> SingleAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                if (hasValue)
+                    throw new InvalidOperationException("Sequence contains more than one matching element.");
+
+                first = item;
+                hasValue = true;
+            }
+        }
+
+        if (!hasValue)
+            throw new InvalidOperationException("Sequence contains no matching element.");
+
+        return first!;
+    }
+
+    /// <summary>
     /// Returns the only item from the stream, or a default value if the stream is empty. Throws if the stream contains more than one item.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -655,5 +821,240 @@ public static class TerminalExtensions
         }
 
         return first;
+    }
+
+    /// <summary>
+    /// Returns the only item from the stream that satisfies a condition, or a default value if no such item exists. Throws if more than one item matches.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the single matching item, or the default value of T if none found.</returns>
+    /// <exception cref="InvalidOperationException">More than one item matches the condition.</exception>
+    public static async Task<T?> SingleOrDefaultAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                if (hasValue)
+                    throw new InvalidOperationException("Sequence contains more than one matching element.");
+
+                first = item;
+                hasValue = true;
+            }
+        }
+
+        return first;
+    }
+
+    /// <summary>
+    /// Returns the item at a specified index in a stream.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="index">The zero-based index of the element to retrieve.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element at the specified position in the source stream.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is less than 0.</exception>
+    /// <exception cref="InvalidOperationException">The stream contains fewer than <paramref name="index"/> + 1 elements.</exception>
+    public static async Task<T> ElementAtAsync<T>(this IStream<T> stream, int index, CancellationToken cancellationToken = default)
+    {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        int current = 0;
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (current == index)
+                return item;
+            current++;
+        }
+
+        throw new InvalidOperationException("Sequence contains no elements at the specified index.");
+    }
+
+    /// <summary>
+    /// Returns the item at a specified index in a stream or a default value if the index is out of range.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="index">The zero-based index of the element to retrieve.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element at the specified position in the source stream, or a default value if the index is out of range.</returns>
+    public static async Task<T?> ElementAtOrDefaultAsync<T>(this IStream<T> stream, int index, CancellationToken cancellationToken = default)
+    {
+        if (index < 0)
+            return default;
+
+        int current = 0;
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (current == index)
+                return item;
+            current++;
+        }
+
+        return default;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the first item from the stream, or an empty option if the stream is empty.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the first item if it exists.</returns>
+    public static async Task<Option<T>> FirstOrNoneAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            return Option<T>.Some(item);
+        }
+        return Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the first item from the stream that satisfies a condition, or an empty option if no such item exists.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the first matching item if it exists.</returns>
+    public static async Task<Option<T>> FirstOrNoneAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+                return Option<T>.Some(item);
+        }
+        return Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the last item from the stream, or an empty option if the stream is empty.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the last item if it exists.</returns>
+    public static async Task<Option<T>> LastOrNoneAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        T? last = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            last = item;
+            hasValue = true;
+        }
+
+        return hasValue ? Option<T>.Some(last!) : Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the last item from the stream that satisfies a condition, or an empty option if no such item exists.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the last matching item if it exists.</returns>
+    public static async Task<Option<T>> LastOrNoneAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? last = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                last = item;
+                hasValue = true;
+            }
+        }
+
+        return hasValue ? Option<T>.Some(last!) : Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the only item from the stream, or an empty option if the stream is empty or contains more than one item.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the only item if it exists.</returns>
+    public static async Task<Option<T>> SingleOrNoneAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (hasValue)
+                return Option<T>.None;
+
+            first = item;
+            hasValue = true;
+        }
+
+        return hasValue ? Option<T>.Some(first!) : Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the only item from the stream that satisfies a condition, or an empty option if no such item exists or multiple items match.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">A function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the single matching item if it exists.</returns>
+    public static async Task<Option<T>> SingleOrNoneAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
+    {
+        T? first = default;
+        bool hasValue = false;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                if (hasValue)
+                    return Option<T>.None;
+
+                first = item;
+                hasValue = true;
+            }
+        }
+
+        return hasValue ? Option<T>.Some(first!) : Option<T>.None;
+    }
+
+    /// <summary>
+    /// Returns an <see cref="Option{T}"/> containing the item at a specified index in a stream, or an empty option if the index is out of range.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="index">The zero-based index of the element to retrieve.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns an option containing the element at the specified position if it exists.</returns>
+    public static async Task<Option<T>> ElementAtOrNoneAsync<T>(this IStream<T> stream, int index, CancellationToken cancellationToken = default)
+    {
+        if (index < 0)
+            return Option<T>.None;
+
+        int current = 0;
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (current == index)
+                return Option<T>.Some(item);
+            current++;
+        }
+
+        return Option<T>.None;
     }
 }
