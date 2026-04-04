@@ -1,3 +1,4 @@
+using Streamix.Concurrency;
 using Streamix.Implementations;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -11,6 +12,25 @@ public static class Stream
 {
     static class AsyncEnumerable
     {
+        public static async IAsyncEnumerable<long> Interval(TimeSpan dueTime, TimeSpan period, IClock clock, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (dueTime < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(dueTime));
+            if (period <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(period));
+
+            if (dueTime > TimeSpan.Zero)
+            {
+                await clock.Delay(dueTime, cancellationToken);
+            }
+
+            long counter = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return counter++;
+                await clock.Delay(period, cancellationToken);
+            }
+        }
+
         public static async IAsyncEnumerable<T> Defer<T>(Func<CancellationToken, IStream<T>> factory, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var source = factory(cancellationToken);
@@ -99,6 +119,23 @@ public static class Stream
     /// <param name="count">The number of sequential integers to generate.</param>
     /// <returns>A stream that contains a range of sequential integers.</returns>
     public static IStream<int> Range(int start, int count) => From(AsyncEnumerable.Range(start, count));
+
+    /// <summary>
+    /// Returns a stream that emits a sequential long integer every specified time interval.
+    /// </summary>
+    /// <param name="period">The time interval between emissions.</param>
+    /// <returns>A stream that emits sequential long integers.</returns>
+    public static IStream<long> Interval(TimeSpan period) => Interval(period, period);
+
+    /// <summary>
+    /// Returns a stream that emits a sequential long integer after an initial delay, and then every specified time interval.
+    /// </summary>
+    /// <param name="dueTime">The initial delay before the first emission.</param>
+    /// <param name="period">The time interval between subsequent emissions.</param>
+    /// <returns>A stream that emits sequential long integers.</returns>
+    public static IStream<long> Interval(TimeSpan dueTime, TimeSpan period) => From(AsyncEnumerable.Interval(dueTime, period, SystemClock.Instance));
+
+    internal static IStream<long> Interval(TimeSpan dueTime, TimeSpan period, IClock clock) => From(AsyncEnumerable.Interval(dueTime, period, clock), clock);
 
     /// <summary>
     /// Creates a stream that reads all items from the specified <see cref="ChannelReader{T}"/>.

@@ -63,11 +63,10 @@ public class TimeBasedOperatorTests
         }
     }
 
-    TestClock clock = new TestClock();
-
     [Test]
     public async Task Delay_ShouldRespectCancellation()
     {
+        var clock = new TestClock();
         var source = Stream.Range(1, 10);
         var delayed = Stream.From<int>(source, clock).Delay(TimeSpan.FromSeconds(1));
         using var cts = new CancellationTokenSource();
@@ -87,6 +86,7 @@ public class TimeBasedOperatorTests
     [Test]
     public async Task Delay_ShouldPostponeEmission()
     {
+        var clock = new TestClock();
         var source = Stream.Range(1, 3);
         var delayed = Stream.From<int>(source, clock).Delay(TimeSpan.FromSeconds(1));
         var results = new List<int>();
@@ -125,6 +125,7 @@ public class TimeBasedOperatorTests
     [Test]
     public async Task Throttle_ShouldEmitOnlyFirstItemInInterval()
     {
+        var clock = new TestClock();
         var source = new ManualAsyncEnumerable<int>(clock);
         var throttled = ((Stream<int>)Stream.From<int>(source, clock)).Throttle(TimeSpan.FromSeconds(1));
         var results = new List<int>();
@@ -159,5 +160,123 @@ public class TimeBasedOperatorTests
 
         source.Complete();
         await task;
+    }
+
+    [Test]
+    public async Task Interval_ShouldEmitSequentialLongs()
+    {
+        var clock = new TestClock();
+        var interval = Stream.Interval(TimeSpan.Zero, TimeSpan.FromSeconds(1), clock);
+        var results = new List<long>();
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in interval.Take(3))
+                results.Add(item);
+        });
+
+        // First item emitted immediately due to TimeSpan.Zero dueTime
+        for (int i = 0; i < 100 && results.Count < 1; i++) await Task.Delay(10);
+        Assert.That(results, Is.EquivalentTo(new[] { 0L }));
+
+        // Advance 1s -> second item
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && results.Count < 2; i++) await Task.Delay(10);
+        Assert.That(results, Is.EquivalentTo(new[] { 0L, 1L }));
+
+        // Advance another 1s -> third item
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await task;
+        Assert.That(results, Is.EquivalentTo(new[] { 0L, 1L, 2L }));
+    }
+
+    [Test]
+    public async Task Interval_WithDueTime_ShouldRespectInitialDelay()
+    {
+        var clock = new TestClock();
+        var interval = Stream.Interval(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(1), clock);
+        var results = new List<long>();
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in interval.Take(1))
+                results.Add(item);
+        });
+
+        // Wait for first delay (dueTime)
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(results, Is.Empty);
+
+        // Advance 2s -> first item
+        clock.AdvanceBy(TimeSpan.FromSeconds(2));
+        await task;
+        Assert.That(results, Is.EquivalentTo(new[] { 0L }));
+    }
+
+    [Test]
+    public async Task Interval_ShouldNotAccumulateTicks()
+    {
+        var clock = new TestClock();
+        var interval = Stream.Interval(TimeSpan.Zero, TimeSpan.FromSeconds(1), clock);
+        var results = new List<long>();
+        var semaphore = new SemaphoreSlim(0);
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in interval.Take(2))
+            {
+                results.Add(item);
+                await semaphore.WaitAsync(); // Simulate slow consumer
+            }
+        });
+
+        // 1. First item emitted immediately
+        for (int i = 0; i < 100 && results.Count < 1; i++) await Task.Delay(10);
+        Assert.That(results, Is.EquivalentTo(new[] { 0L }));
+
+        // 2. Advance time by 5 seconds.
+        // Even though 5 seconds passed, the second item should not have been emitted yet
+        // because the consumer is still processing the first item and hasn't called MoveNextAsync yet.
+        clock.AdvanceBy(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        Assert.That(results, Has.Count.EqualTo(1));
+
+        // 3. Release consumer.
+        semaphore.Release();
+
+        // Now the consumer finishes processing first item and calls MoveNextAsync() for the second.
+        // The iterator will then reach its first 'await clock.Delay(period)'.
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+
+        // 4. Advance clock again to trigger the second emission
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+
+        for (int i = 0; i < 100 && results.Count < 2; i++) await Task.Delay(10);
+        Assert.That(results, Has.Count.EqualTo(2));
+        Assert.That(results[1], Is.EqualTo(1L));
+
+        semaphore.Release(); // allow Take(2) to complete
+        await task;
+    }
+
+    [Test]
+    public async Task Interval_ShouldRespectCancellation()
+    {
+        var clock = new TestClock();
+        var interval = Stream.Interval(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), clock);
+        using var cts = new CancellationTokenSource();
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in interval.WithCancellation(cts.Token))
+            { }
+        });
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
     }
 }
