@@ -247,6 +247,20 @@ public class StreamTests
     }
 
     [Test]
+    public async Task ToChannel_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var channel = Channel.CreateUnbounded<int>();
+
+        var stream = Stream.Range(1, 100).DoOnNext(x => {
+            if (x == 5) cts.Cancel();
+        });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.ToChannel(channel.Writer, cancellationToken: cts.Token));
+    }
+
+    [Test]
     public async Task From_IEnumerable_Emits_Correct_Values()
     {
         var items = new List<int> { 1, 2, 3, 4, 5 };

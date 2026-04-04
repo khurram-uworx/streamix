@@ -54,6 +54,39 @@ public class TerminalExtensionsTests
         Assert.That(dict["A"], Is.EqualTo("a"));
     }
 
+    [Test]
+    public async Task ToDictionaryAsync_Empty_Stream_Returns_Empty_Dictionary()
+    {
+        var stream = Stream.Empty<int>();
+        var dict = await stream.ToDictionaryAsync<int, int>(x => x, (IEqualityComparer<int>?)null);
+        Assert.That(dict.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ToDictionaryAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToDictionaryAsync<int, int>(x => x, (IEqualityComparer<int>?)null));
+    }
+
+    [Test]
+    public void ToDictionaryAsync_Propagates_KeySelector_Exception()
+    {
+        var stream = Stream.Range(1, 5);
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.ToDictionaryAsync<int, int>(x => throw new InvalidOperationException("Selector failure"), (IEqualityComparer<int>?)null));
+    }
+
+    [Test]
+    public void ToDictionaryAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.ToDictionaryAsync<int, int>(x => x, (IEqualityComparer<int>?)null, cts.Token));
+    }
+
     // LINQ Terminals with Predicates Tests
 
     [Test]
@@ -163,6 +196,48 @@ public class TerminalExtensionsTests
     {
         var stream = Stream.Range(1, 3);
         var result = await stream.ElementAtOrDefaultAsync(5);
+        Assert.That(result, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ElementAtAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ElementAtAsync(0));
+    }
+
+    [Test]
+    public void ElementAtAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.ElementAtAsync(10, cts.Token));
+    }
+
+    [Test]
+    public void ElementAtOrDefaultAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ElementAtOrDefaultAsync(0));
+    }
+
+    [Test]
+    public void ElementAtOrDefaultAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.ElementAtOrDefaultAsync(10, cts.Token));
+    }
+
+    [Test]
+    public async Task ElementAtOrDefaultAsync_Returns_Default_If_Index_Negative()
+    {
+        var stream = Stream.Range(1, 3);
+        var result = await stream.ElementAtOrDefaultAsync(-1);
         Assert.That(result, Is.EqualTo(0));
     }
 
@@ -313,6 +388,70 @@ public class TerminalExtensionsTests
         Assert.That(result, Is.EqualTo((1, "a")));
     }
 
+    [Test]
+    public void MaxByAsync_Empty_Stream_Throws_InvalidOperationException()
+    {
+        var stream = Stream.Empty<int>();
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.MaxByAsync(x => x));
+    }
+
+    [Test]
+    public void MaxByAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.MaxByAsync(x => x));
+    }
+
+    [Test]
+    public void MaxByAsync_Propagates_Selector_Exception()
+    {
+        var stream = Stream.Range(1, 5);
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.MaxByAsync<int, int>(x => throw new InvalidOperationException("Selector failure")));
+    }
+
+    [Test]
+    public void MaxByAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.MaxByAsync(x => x, cts.Token));
+    }
+
+    [Test]
+    public void MinByAsync_Empty_Stream_Throws_InvalidOperationException()
+    {
+        var stream = Stream.Empty<int>();
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.MinByAsync(x => x));
+    }
+
+    [Test]
+    public void MinByAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.MinByAsync(x => x));
+    }
+
+    [Test]
+    public void MinByAsync_Propagates_Selector_Exception()
+    {
+        var stream = Stream.Range(1, 5);
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.MinByAsync<int, int>(x => throw new InvalidOperationException("Selector failure")));
+    }
+
+    [Test]
+    public void MinByAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.MinByAsync(x => x, cts.Token));
+    }
+
     // Bridging Terminals Tests
 
     [Test]
@@ -407,6 +546,32 @@ public class TerminalExtensionsTests
         var stream = Stream.Range(1, 5).DoOnNext(_ => count++);
         await stream.DrainAsync();
         Assert.That(count, Is.EqualTo(5));
+    }
+
+    [Test]
+    public async Task DrainAsync_Empty_Stream_Works()
+    {
+        var count = 0;
+        var stream = Stream.Empty<int>().DoOnNext(_ => count++);
+        await stream.DrainAsync();
+        Assert.That(count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void DrainAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("Upstream failure"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.DrainAsync());
+    }
+
+    [Test]
+    public void DrainAsync_Respects_Cancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Range(1, 100).DoOnNext(x => { if (x == 5) cts.Cancel(); });
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.DrainAsync(cts.Token));
     }
 
     // Diagnostics-aware Terminals Tests
