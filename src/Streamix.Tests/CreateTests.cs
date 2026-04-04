@@ -22,6 +22,21 @@ public class CreateTests
     }
 
     [Test]
+    public async Task Create_Producer_Throws_After_Emit_And_Complete_Should_Not_Affect_Stream()
+    {
+        var stream = Stream.Create<int>(async emitter =>
+        {
+            await emitter.EmitAsync(1);
+            emitter.Complete();
+            throw new InvalidOperationException("Should be ignored");
+        });
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(1)
+            .AssertComplete();
+    }
+
+    [Test]
     public async Task Create_Supports_Backpressure()
     {
         var secondEmitStarted = new TaskCompletionSource<bool>();

@@ -123,4 +123,22 @@ public class GenerateTests
             .AssertValues(0, 1)
             .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Async Generation Error")));
     }
+
+    [Test]
+    public async Task Generate_RestartsFromInitialStatePerSubscription()
+    {
+        var stream = Stream.Generate<int, int>(0, state =>
+        {
+            if (state >= 3) return GenerationResult<int, int>.Complete();
+            return GenerationResult<int, int>.Emit(state, state + 1);
+        });
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1, 2)
+            .AssertComplete();
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1, 2)
+            .AssertComplete();
+    }
 }

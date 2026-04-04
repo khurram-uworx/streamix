@@ -263,4 +263,34 @@ public class TimeBasedOperatorTests
         subscriber.AssertValueCount(0);
         subscriber.AssertNotComplete();
     }
+
+    [Test]
+    public void Interval_ShouldThrowForNegativeDueTime()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            var interval = Stream.Interval(TimeSpan.FromSeconds(-1), TimeSpan.FromSeconds(1));
+            await foreach (var item in interval) { }
+        });
+    }
+
+    [Test]
+    public void Interval_ShouldThrowForZeroPeriod()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            var interval = Stream.Interval(TimeSpan.Zero, TimeSpan.Zero);
+            await foreach (var item in interval) { }
+        });
+    }
+
+    [Test]
+    public void Interval_ShouldThrowForNegativePeriod()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            var interval = Stream.Interval(TimeSpan.Zero, TimeSpan.FromSeconds(-1));
+            await foreach (var item in interval) { }
+        });
+    }
 }

@@ -141,4 +141,45 @@ public class SingleFactoryTests
             .AssertValueCount(0)
             .AssertNotComplete();
     }
+
+    [Test]
+    public async Task Defer_WithCT_IsLazyAndInvokedPerSubscription()
+    {
+        int count = 0;
+        var single = Single.Defer(ct =>
+        {
+            count++;
+            return Single.From(count);
+        });
+
+        Assert.That(count, Is.EqualTo(0));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(1)
+            .AssertComplete();
+        Assert.That(count, Is.EqualTo(1));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(2)
+            .AssertComplete();
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task Defer_WithCT_PropagatesToken()
+    {
+        CancellationToken capturedToken = default;
+        var single = Single.Defer(ct =>
+        {
+            capturedToken = ct;
+            return Single.From(42);
+        });
+
+        using var cts = new CancellationTokenSource();
+        (await TestSubscriber<int>.SubscribeAsync(single, cts.Token))
+            .AssertValues(42)
+            .AssertComplete();
+
+        Assert.That(capturedToken, Is.EqualTo(cts.Token));
+    }
 }
