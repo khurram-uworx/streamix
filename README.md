@@ -220,7 +220,7 @@ var stream = Stream.Create<int>(async emitter => {
 });
 ```
 *   **Backpressure**: `EmitAsync` awaits if the downstream consumer is slow.
-*   **Cancellation**: Check `emitter.CancellationToken` to stop producing.
+*   **Cancellation**: Check `emitter.CancellationToken` to stop producing. `EmitAsync` will throw an `OperationCanceledException` if the subscriber cancels or if the stream has already reached a terminal state (`Complete` or `Fail`).
 
 ### `Stream.Defer<T>` / `Single.Defer<T>`
 Lazy creation: the factory is called once per subscriber.
@@ -247,9 +247,11 @@ var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 Shorthands for values, Tasks, and Async Enumerables.
 
 *   **Eager vs. Lazy**:
-    *   `From(Task<T>)` wraps existing, already-started work (**eager**).
-    *   `From(Func<Task<T>>)` and `From(Func<CancellationToken, Task<T>>)` defer the creation and start of the task until the stream is subscribed to (**lazy**).
-    *   `Stream.Defer(...)` and `Single.Defer(...)` are always **lazy** and call the factory once per subscriber.
+    *   `From(Task<T>)` wraps existing, already-started work (**eager**). If the task is already completed, the stream will emit the result immediately upon subscription.
+    *   `From(Func<Task<T>>)` and `From(Func<CancellationToken, Task<T>>)` defer the creation and start of the task until the stream is subscribed to (**lazy**). The factory is called once per subscriber.
+    *   `Stream.Defer(...)` and `Single.Defer(...)` are always **lazy** and call the factory once per subscriber to create the entire stream instance.
+*   **Single Cardinality**:
+    *   `Single.From(IAsyncEnumerable<T>)` strictly enforces a **0..1 cardinality**. If the source enumerable produces more than one item, an `InvalidOperationException` is thrown during enumeration.
 
 ```csharp
 Stream.Just(42);
