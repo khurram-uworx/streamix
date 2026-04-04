@@ -433,4 +433,125 @@ public class TerminalExtensionsTests
         Assert.That(result.Completed, Is.False);
         Assert.That(result.Error?.Message, Is.EqualTo("test"));
     }
+
+    // ContainsAsync Tests
+
+    [Test]
+    public async Task ContainsAsync_Returns_True_If_Found()
+    {
+        var stream = Stream.Range(1, 5);
+        var result = await stream.ContainsAsync(3);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ContainsAsync_Returns_False_If_Not_Found()
+    {
+        var stream = Stream.Range(1, 5);
+        var result = await stream.ContainsAsync(10);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ContainsAsync_With_Comparer_Works()
+    {
+        var stream = Stream.From(new[] { "a", "b", "c" }.ToAsyncEnumerable());
+        var result = await stream.ContainsAsync("A", StringComparer.OrdinalIgnoreCase);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ContainsAsync_With_Empty_Stream_Returns_False()
+    {
+        var stream = Stream.Empty<int>();
+        var result = await stream.ContainsAsync(1);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ContainsAsync_Respects_Cancellation()
+    {
+        var stream = Stream.Never<int>();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await stream.ContainsAsync(1, cts.Token));
+    }
+
+    [Test]
+    public void ContainsAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("upstream"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ContainsAsync(1));
+    }
+
+    // ToLookupAsync Tests
+
+    [Test]
+    public async Task ToLookupAsync_Basic_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var lookup = await stream.ToLookupAsync(x => x % 2 == 0 ? "even" : "odd");
+
+        Assert.That(lookup.Count, Is.EqualTo(2));
+        Assert.That(lookup["even"], Is.EquivalentTo(new[] { 2, 4 }));
+        Assert.That(lookup["odd"], Is.EquivalentTo(new[] { 1, 3, 5 }));
+    }
+
+    [Test]
+    public async Task ToLookupAsync_With_ValueSelector_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var lookup = await stream.ToLookupAsync(x => x % 2 == 0 ? "even" : "odd", x => x * 10);
+
+        Assert.That(lookup["even"], Is.EquivalentTo(new[] { 20, 40 }));
+        Assert.That(lookup["odd"], Is.EquivalentTo(new[] { 10, 30, 50 }));
+    }
+
+    [Test]
+    public async Task ToLookupAsync_With_Comparer_Works()
+    {
+        var stream = Stream.From(new[] { "a", "b", "A" }.ToAsyncEnumerable());
+        var lookup = await stream.ToLookupAsync(x => x, StringComparer.OrdinalIgnoreCase);
+
+        Assert.That(lookup.Count, Is.EqualTo(2));
+        Assert.That(lookup["a"], Is.EquivalentTo(new[] { "a", "A" }));
+        Assert.That(lookup["b"], Is.EquivalentTo(new[] { "b" }));
+    }
+
+    [Test]
+    public async Task ToLookupAsync_With_Empty_Stream_Works()
+    {
+        var stream = Stream.Empty<int>();
+        var lookup = await stream.ToLookupAsync(x => x);
+
+        Assert.That(lookup.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task ToLookupAsync_Handles_Null_Keys()
+    {
+        var stream = Stream.From(new[] { "a", null, "b" }.ToAsyncEnumerable());
+        var lookup = await stream.ToLookupAsync(x => x);
+
+        Assert.That(lookup.Count, Is.EqualTo(3));
+        Assert.That(lookup[null], Is.EquivalentTo(new[] { (string?)null }));
+    }
+
+    [Test]
+    public void ToLookupAsync_Respects_Cancellation()
+    {
+        var stream = Stream.Never<int>();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await stream.ToLookupAsync(x => x, cts.Token));
+    }
+
+    [Test]
+    public void ToLookupAsync_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("upstream"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToLookupAsync(x => x));
+    }
 }

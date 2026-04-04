@@ -140,8 +140,9 @@ var replayed = Stream.Range(1, 3).Replay(2);
 
 `IStream<T>` includes `ForEachAsync(...)` and channel output. Additional terminal operators are available through extension methods:
 
-* `ToListAsync`, `ToArrayAsync`, `ToHashSetAsync`, `ToDictionaryAsync`
+* `ToListAsync`, `ToArrayAsync`, `ToHashSetAsync`, `ToDictionaryAsync`, `ToLookupAsync`
 * `FirstAsync` / `LastAsync` (and `OrDefault` variants)
+* `ContainsAsync`
 * `SingleAsync` (and `OrDefault` variant)
 * `AggregateAsync` / `CountAsync` / `AnyAsync` / `AllAsync`
 * `MinAsync` / `MaxAsync`
