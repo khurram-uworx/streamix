@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
 namespace Streamix.Tests;
@@ -243,5 +244,111 @@ public class StreamTests
         { }
 
         await channel.Reader.Completion;
+    }
+
+    [Test]
+    public async Task From_IEnumerable_Emits_Correct_Values()
+    {
+        var items = new List<int> { 1, 2, 3, 4, 5 };
+        var stream = Stream.From((IEnumerable<int>)items);
+
+        var result = await stream.ToListAsync();
+
+        Assert.That(result, Is.EqualTo(items));
+    }
+
+    [Test]
+    public async Task From_Params_Array_Emits_Correct_Values()
+    {
+        var stream = Stream.From(1, 2, 3);
+
+        var result = await stream.ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public async Task From_AsyncEnumerable_Factory_Is_Lazy_And_Invoked_Once_Per_Subscriber()
+    {
+        int factoryInvocations = 0;
+        var stream = Stream.From((Func<CancellationToken, IAsyncEnumerable<int>>)(ct =>
+        {
+            factoryInvocations++;
+            return GetItems();
+
+            async IAsyncEnumerable<int> GetItems()
+            {
+                yield return 1;
+                await Task.Yield();
+                yield return 2;
+            }
+        }));
+
+        Assert.That(factoryInvocations, Is.EqualTo(0));
+
+        var result1 = await stream.ToListAsync();
+        Assert.That(result1, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(factoryInvocations, Is.EqualTo(1));
+
+        var result2 = await stream.ToListAsync();
+        Assert.That(result2, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(factoryInvocations, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task From_AsyncEnumerable_Factory_Respects_Cancellation()
+    {
+        var factoryCts = new TaskCompletionSource<CancellationToken>();
+        var stream = Stream.From((Func<CancellationToken, IAsyncEnumerable<int>>)(ct =>
+        {
+            factoryCts.SetResult(ct);
+            return GetItems(ct);
+
+            async IAsyncEnumerable<int> GetItems([EnumeratorCancellation] CancellationToken cancellationToken)
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    yield return 1;
+                    await Task.Delay(10, cancellationToken);
+                }
+            }
+        }));
+
+        var cts = new CancellationTokenSource();
+        var enumerator = stream.GetAsyncEnumerator(cts.Token);
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        var ct = await factoryCts.Task;
+
+        cts.Cancel();
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await enumerator.MoveNextAsync());
+        Assert.That(ct.IsCancellationRequested, Is.True);
+    }
+
+    [Test]
+    public async Task From_AsyncEnumerable_Factory_Propagates_Exception()
+    {
+        var stream = Stream.From<int>((Func<CancellationToken, IAsyncEnumerable<int>>)(ct =>
+        {
+            throw new InvalidOperationException("Factory error");
+        }));
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        var stream2 = Stream.From<int>((Func<CancellationToken, IAsyncEnumerable<int>>)(ct =>
+        {
+            return GetItems();
+
+            async IAsyncEnumerable<int> GetItems()
+            {
+                yield return 1;
+                throw new InvalidOperationException("Stream error");
+            }
+        }));
+
+        var enumerator = stream2.GetAsyncEnumerator();
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await enumerator.MoveNextAsync());
     }
 }

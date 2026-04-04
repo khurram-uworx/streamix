@@ -109,6 +109,26 @@ public static class Stream
                 state = result.NextState;
             }
         }
+
+        public static async IAsyncEnumerable<T> FromEnumerable<T>(IEnumerable<T> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var item in source)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return item;
+            }
+
+            await Task.Yield();
+        }
+
+        public static async IAsyncEnumerable<T> DeferAsyncEnumerable<T>(Func<CancellationToken, IAsyncEnumerable<T>> factory, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var source = factory(cancellationToken);
+            await foreach (var item in source.WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
     }
 
     internal static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
@@ -140,6 +160,31 @@ public static class Stream
     /// <param name="value">The value to emit.</param>
     /// <returns>A stream that emits the specified value and then completes.</returns>
     public static IStream<T> From<T>(T value) => From(AsyncEnumerable.Just(value));
+
+    /// <summary>
+    /// Creates a stream from an <see cref="IEnumerable{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="source">The source enumerable.</param>
+    /// <returns>A stream wrapping the source.</returns>
+    public static IStream<T> From<T>(IEnumerable<T> source) => From(AsyncEnumerable.FromEnumerable(source));
+
+    /// <summary>
+    /// Creates a stream from a params array of items.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="items">The items to emit.</param>
+    /// <returns>A stream that emits the specified items and then completes.</returns>
+    public static IStream<T> From<T>(params T[] items) => From((IEnumerable<T>)items);
+
+    /// <summary>
+    /// Creates a stream from a factory function that returns an <see cref="IAsyncEnumerable{T}"/>.
+    /// The factory is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="factory">The factory function to invoke.</param>
+    /// <returns>A stream created from the factory function.</returns>
+    public static IStream<T> From<T>(Func<CancellationToken, IAsyncEnumerable<T>> factory) => From(AsyncEnumerable.DeferAsyncEnumerable(factory));
 
     /// <summary>
     /// Creates a stream from a single value. Alias for <see cref="From{T}(T)"/>.

@@ -255,8 +255,10 @@ Shorthands for values, Tasks, and Async Enumerables.
 
 ```csharp
 Stream.Just(42);
+Stream.From(new[] { 1, 2, 3 }); // from array
 Stream.From(Task.FromResult("hello")); // eager
-Single.From(async ct => await FetchData(ct)); // lazy
+Stream.From(async ct => await FetchData(ct)); // lazy IAsyncEnumerable factory
+Single.From(async ct => await FetchData(ct)); // lazy Task factory
 ```
 
 ---
