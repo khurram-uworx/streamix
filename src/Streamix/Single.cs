@@ -43,6 +43,16 @@ public static class Single
         yield return await taskFactory(ct).WaitAsync(ct);
     }
 
+    static async IAsyncEnumerable<TValue> toAsyncEnumerableFromValueTaskFunc<TValue>(Func<ValueTask<TValue>> taskFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return await taskFactory().AsTask().WaitAsync(ct);
+    }
+
+    static async IAsyncEnumerable<TValue> toAsyncEnumerableFromValueTaskFuncWithCt<TValue>(Func<CancellationToken, ValueTask<TValue>> taskFactory, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return await taskFactory(ct).AsTask().WaitAsync(ct);
+    }
+
     static async IAsyncEnumerable<TValue> defer<TValue>(Func<ISingle<TValue>> factory, [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var item in factory().WithCancellation(ct))
@@ -124,6 +134,32 @@ public static class Single
     /// <param name="taskFactory">The function to invoke.</param>
     /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
     public static ISingle<T> From<T>(Func<CancellationToken, Task<T>> taskFactory) => From(toAsyncEnumerableFromTaskFuncWithCt(taskFactory));
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a <see cref="ValueTask{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="task">The task to wrap.</param>
+    /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
+    public static ISingle<T> From<T>(ValueTask<T> task) => From(task.AsTask());
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a function that returns a <see cref="ValueTask{T}"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
+    public static ISingle<T> From<T>(Func<ValueTask<T>> taskFactory) => From(toAsyncEnumerableFromValueTaskFunc(taskFactory));
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a function that returns a <see cref="ValueTask{T}"/> and accepts a <see cref="CancellationToken"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A single-item stream that emits the result of the task and then completes.</returns>
+    public static ISingle<T> From<T>(Func<CancellationToken, ValueTask<T>> taskFactory) => From(toAsyncEnumerableFromValueTaskFuncWithCt(taskFactory));
 
     /// <summary>
     /// Creates an empty <see cref="ISingle{T}"/>.

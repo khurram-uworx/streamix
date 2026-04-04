@@ -222,6 +222,33 @@ public static class Stream
     public static IStream<T> From<T>(Func<CancellationToken, Task<T>> taskFactory) => From(Single.From(taskFactory));
 
     /// <summary>
+    /// Creates a stream from a <see cref="ValueTask{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="task">The task to wrap.</param>
+    /// <returns>A stream that emits the result of the task and then completes.</returns>
+    public static IStream<T> From<T>(ValueTask<T> task) => From(Single.From(task));
+
+    /// <summary>
+    /// Creates a stream from a function that returns a <see cref="ValueTask{T}"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A stream that emits the result of the task and then completes.</returns>
+    public static IStream<T> From<T>(Func<ValueTask<T>> taskFactory) => From(Single.From(taskFactory));
+
+    /// <summary>
+    /// Creates a stream from a function that returns a <see cref="ValueTask{T}"/> and accepts a <see cref="CancellationToken"/>.
+    /// The function is invoked lazily when the stream is subscribed to.
+    /// The provided <see cref="CancellationToken"/> will be cancelled if the subscriber cancels their subscription.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="taskFactory">The function to invoke.</param>
+    /// <returns>A stream that emits the result of the task and then completes.</returns>
+    public static IStream<T> From<T>(Func<CancellationToken, ValueTask<T>> taskFactory) => From(Single.From(taskFactory));
+
+    /// <summary>
     /// Creates an empty stream.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>

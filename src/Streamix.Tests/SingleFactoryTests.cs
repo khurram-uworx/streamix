@@ -36,12 +36,62 @@ public class SingleFactoryTests
     public async Task From_FuncTask_IsLazy()
     {
         int count = 0;
-        var single = Single.From(async () =>
+        var single = Single.From(new Func<Task<int>>(async () =>
         {
             count++;
             await Task.Yield();
             return 42;
-        });
+        }));
+
+        Assert.That(count, Is.EqualTo(0));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(42)
+            .AssertComplete();
+
+        Assert.That(count, Is.EqualTo(1));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(42)
+            .AssertComplete();
+
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task From_ValueTask_Emits_Item()
+    {
+        var single = Single.From(ValueTask.FromResult(42));
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(42)
+            .AssertComplete();
+    }
+
+    [Test]
+    public async Task From_ValueTask_RepeatedSubscription()
+    {
+        // For ValueTask, we convert to Task internally, so it should support multiple subscriptions
+        var single = Single.From(ValueTask.FromResult(42));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(42)
+            .AssertComplete();
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertValues(42)
+            .AssertComplete();
+    }
+
+    [Test]
+    public async Task From_FuncValueTask_IsLazy()
+    {
+        int count = 0;
+        var single = Single.From(new Func<ValueTask<int>>(async () =>
+        {
+            count++;
+            await Task.Yield();
+            return 42;
+        }));
 
         Assert.That(count, Is.EqualTo(0));
 
@@ -62,11 +112,11 @@ public class SingleFactoryTests
     public async Task From_FuncCTTask_RespectsCancellation()
     {
         var cts = new CancellationTokenSource();
-        var single = Single.From(async ct =>
+        var single = Single.From(new Func<CancellationToken, Task<int>>(async ct =>
         {
             await Task.Delay(1000, ct);
             return 42;
-        });
+        }));
 
         var subscribeTask = TestSubscriber<int>.SubscribeAsync(single, cts.Token);
         await Task.Delay(10);
@@ -78,13 +128,45 @@ public class SingleFactoryTests
     }
 
     [Test]
-    public async Task From_FuncTask_PropagatesException()
+    public async Task From_FuncCTValueTask_RespectsCancellation()
     {
-        var single = Single.From<int>(async () =>
+        var cts = new CancellationTokenSource();
+        var single = Single.From(new Func<CancellationToken, ValueTask<int>>(async ct =>
+        {
+            await Task.Delay(1000, ct);
+            return 42;
+        }));
+
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(single, cts.Token);
+        await Task.Delay(10);
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task From_FuncValueTask_PropagatesException()
+    {
+        var single = Single.From(new Func<ValueTask<int>>(async () =>
         {
             await Task.Yield();
             throw new InvalidOperationException("Boom");
-        });
+        }));
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Boom")));
+    }
+
+    [Test]
+    public async Task From_FuncTask_PropagatesException()
+    {
+        var single = Single.From(new Func<Task<int>>(async () =>
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("Boom");
+        }));
 
         (await TestSubscriber<int>.SubscribeAsync(single))
             .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Boom")));

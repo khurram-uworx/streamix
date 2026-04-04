@@ -42,7 +42,7 @@ IStream<int> numbers = Stream.Range(1, 10);
 ISingle<User> user = Single.From(GetUser(id));
 ```
 
-`Single.From(...)` supports values, `Task<T>`, and `IAsyncEnumerable<T>` sources.
+`Single.From(...)` supports values, `Task<T>`, `ValueTask<T>`, and `IAsyncEnumerable<T>` sources.
 
 ---
 
@@ -247,8 +247,8 @@ var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 Shorthands for values, Tasks, and Async Enumerables.
 
 *   **Eager vs. Lazy**:
-    *   `From(Task<T>)` wraps existing, already-started work (**eager**). If the task is already completed, the stream will emit the result immediately upon subscription.
-    *   `From(Func<Task<T>>)` and `From(Func<CancellationToken, Task<T>>)` defer the creation and start of the task until the stream is subscribed to (**lazy**). The factory is called once per subscriber.
+    *   `From(Task<T>)` and `From(ValueTask<T>)` wrap existing, already-started work (**eager**). If the task is already completed, the stream will emit the result immediately upon subscription.
+    *   `From(Func<Task<T>>)`, `From(Func<ValueTask<T>>)`, and their `CancellationToken` overloads defer the creation and start of the task until the stream is subscribed to (**lazy**). The factory is called once per subscriber.
     *   `Stream.Defer(...)` and `Single.Defer(...)` are always **lazy** and call the factory once per subscriber to create the entire stream instance.
 *   **Single Cardinality**:
     *   `Single.From(IAsyncEnumerable<T>)` strictly enforces a **0..1 cardinality**. If the source enumerable produces more than one item, an `InvalidOperationException` is thrown during enumeration.
