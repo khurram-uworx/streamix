@@ -45,6 +45,8 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
         this.clock = clock ?? (source is Stream<T> s ? s.Clock : Streamix.Concurrency.SystemClock.Instance);
     }
 
+    internal IClock Clock => clock;
+
     async Task runConnectionInternal(CancellationToken token)
     {
         await Task.Yield();

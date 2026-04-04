@@ -1,13 +1,21 @@
 using Streamix.Implementations;
 using System.Collections.ObjectModel;
+using System.Threading.Channels;
 
 namespace Streamix;
 
 /// <summary>
-/// Provides static extension methods for <see cref="Stream{T}"/> to offer Sink / Terminal variety.
+/// Provides static extension methods for <see cref="IStream{T}"/> to offer Sink / Terminal variety.
 /// </summary>
 public static class TerminalExtensions
 {
+    private static IClock GetClock<T>(IStream<T> stream)
+    {
+        if (stream is Stream<T> s) return s.Clock;
+        if (stream is ConnectableStream<T> cs) return cs.Clock;
+        return Streamix.Concurrency.SystemClock.Instance;
+    }
+
     /// <summary>
     /// Collects all items from the stream into a <see cref="List{T}"/>.
     /// </summary>
@@ -1056,5 +1064,416 @@ public static class TerminalExtensions
         }
 
         return Option<T>.None;
+    }
+
+    // Reduction Beyond Aggregate
+
+    /// <summary>
+    /// Applies an accumulator function over the stream and returns the final result.
+    /// Alias for <see cref="AggregateAsync{T}(IStream{T}, Func{T, T, T}, CancellationToken)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="accumulator">An accumulator function.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the final accumulated value.</returns>
+    public static Task<T> ReduceAsync<T>(this IStream<T> stream, Func<T, T, T> accumulator, CancellationToken cancellationToken = default)
+    {
+        return stream.AggregateAsync(accumulator, cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies an accumulator function over the stream with a seed and returns the final state only.
+    /// Alias for <see cref="AggregateAsync{T, TAccumulate}(IStream{T}, TAccumulate, Func{TAccumulate, T, TAccumulate}, CancellationToken)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TAccumulate">The type of the accumulated value.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="seed">The initial accumulator value.</param>
+    /// <param name="accumulator">An accumulator function.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the final accumulated state.</returns>
+    public static Task<TAccumulate> ScanLastAsync<T, TAccumulate>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator, CancellationToken cancellationToken = default)
+    {
+        return stream.AggregateAsync(seed, accumulator, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the element from the stream that has the maximum value according to a specified selector.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key used for comparison.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="selector">A function to extract the comparison key from each element.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element with the maximum key value.</returns>
+    /// <exception cref="InvalidOperationException">The stream is empty.</exception>
+    public static async Task<T> MaxByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
+    {
+        bool hasValue = false;
+        T? maxItem = default;
+        TKey? maxKey = default;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            var key = selector(item);
+            if (!hasValue || key.CompareTo(maxKey!) > 0)
+            {
+                maxItem = item;
+                maxKey = key;
+                hasValue = true;
+            }
+        }
+
+        if (!hasValue)
+            throw new InvalidOperationException("Sequence contains no elements.");
+
+        return maxItem!;
+    }
+
+    /// <summary>
+    /// Returns the element from the stream that has the minimum value according to a specified selector.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key used for comparison.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="selector">A function to extract the comparison key from each element.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element with the minimum key value.</returns>
+    /// <exception cref="InvalidOperationException">The stream is empty.</exception>
+    public static async Task<T> MinByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
+    {
+        bool hasValue = false;
+        T? minItem = default;
+        TKey? minKey = default;
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            var key = selector(item);
+            if (!hasValue || key.CompareTo(minKey!) < 0)
+            {
+                minItem = item;
+                minKey = key;
+                hasValue = true;
+            }
+        }
+
+        if (!hasValue)
+            throw new InvalidOperationException("Sequence contains no elements.");
+
+        return minItem!;
+    }
+
+    // Time-aware Terminals
+
+    /// <summary>
+    /// Returns the first item from the stream, or throws if the stream is empty or the timeout is reached.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="timeout">The maximum time to wait for the first item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the first item from the stream.</returns>
+    /// <exception cref="TimeoutException">The timeout is reached before the first item is emitted.</exception>
+    /// <exception cref="InvalidOperationException">The stream is empty.</exception>
+    public static async Task<T> FirstAsync<T>(this IStream<T> stream, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var clock = GetClock(stream);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var delayTask = clock.Delay(timeout, delayCts.Token).ContinueWith(t =>
+        {
+            if (t.IsCompletedSuccessfully)
+            {
+                timeoutCts.Cancel();
+            }
+        }, TaskContinuationOptions.ExecuteSynchronously);
+
+        try
+        {
+            return await stream.FirstAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"The operation has timed out after {timeout}.");
+        }
+        finally
+        {
+            delayCts.Cancel();
+            try { await delayTask; } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Returns the first item from the stream, or a default value if the stream is empty or the timeout is reached.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="timeout">The maximum time to wait for the first item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the first item from the stream, or the default value of T if empty or timed out.</returns>
+    public static async Task<T?> FirstOrDefaultAsync<T>(this IStream<T> stream, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var clock = GetClock(stream);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var delayTask = clock.Delay(timeout, delayCts.Token).ContinueWith(t =>
+        {
+            if (t.IsCompletedSuccessfully)
+            {
+                timeoutCts.Cancel();
+            }
+        }, TaskContinuationOptions.ExecuteSynchronously);
+
+        try
+        {
+            return await stream.FirstOrDefaultAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            return default;
+        }
+        finally
+        {
+            delayCts.Cancel();
+            try { await delayTask; } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Collects all items emitted by the stream within a specified duration into a <see cref="List{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="duration">The duration for which to collect items.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a list of items collected within the specified duration.</returns>
+    public static async Task<List<T>> CollectAsync<T>(this IStream<T> stream, TimeSpan duration, CancellationToken cancellationToken = default)
+    {
+        var list = new List<T>();
+        var clock = GetClock(stream);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var delayTask = clock.Delay(duration, delayCts.Token).ContinueWith(t =>
+        {
+            if (t.IsCompletedSuccessfully)
+            {
+                timeoutCts.Cancel();
+            }
+        }, TaskContinuationOptions.ExecuteSynchronously);
+
+        try
+        {
+            await foreach (var item in stream.WithCancellation(timeoutCts.Token))
+            {
+                list.Add(item);
+            }
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // Expected when duration is reached
+        }
+        finally
+        {
+            delayCts.Cancel();
+            try { await delayTask; } catch { }
+        }
+
+        return list;
+    }
+
+    // Bridging Terminals
+
+    /// <summary>
+    /// Terminal operation that writes all items of the stream to a new <see cref="ChannelReader{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="capacity">The capacity of the channel. If not specified, an unbounded channel is created.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A channel reader that provides items from the stream.</returns>
+    public static ChannelReader<T> ToChannel<T>(this IStream<T> stream, int? capacity = null, CancellationToken cancellationToken = default)
+    {
+        var channel = capacity.HasValue
+            ? Channel.CreateBounded<T>(capacity.Value)
+            : Channel.CreateUnbounded<T>();
+
+        _ = stream.ToChannel(channel.Writer, true, cancellationToken);
+
+        return channel.Reader;
+    }
+
+    /// <summary>
+    /// Converts the stream into a blocking <see cref="IEnumerable{T}"/>.
+    /// This should be used with caution as it blocks the calling thread.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <returns>A blocking enumerable.</returns>
+    public static IEnumerable<T> ToEnumerableBlocking<T>(this IStream<T> stream)
+    {
+        // Using Task.Run to avoid deadlocks in environments with a SynchronizationContext
+        var enumerator = Task.Run(() => stream.GetAsyncEnumerator()).GetAwaiter().GetResult();
+        try
+        {
+            while (true)
+            {
+                if (!Task.Run(() => enumerator.MoveNextAsync().AsTask()).GetAwaiter().GetResult())
+                    yield break;
+
+                yield return enumerator.Current;
+            }
+        }
+        finally
+        {
+            Task.Run(() => enumerator.DisposeAsync().AsTask()).GetAwaiter().GetResult();
+        }
+    }
+
+    /// <summary>
+    /// Explicitly returns the stream as an <see cref="IAsyncEnumerable{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <returns>The stream as an <see cref="IAsyncEnumerable{T}"/>.</returns>
+    public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IStream<T> stream)
+    {
+        return stream;
+    }
+
+    // Consumption Control
+
+    /// <summary>
+    /// Terminal operation that executes an asynchronous action for each element of the stream with concurrency control.
+    /// This is an ergonomic shortcut for <c>stream.FlatMap(x => Process(x), maxConcurrency).DrainAsync()</c>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="action">The asynchronous action to execute for each element.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when all elements have been processed.</returns>
+    public static Task ForEachAsync<T>(this IStream<T> stream, Func<T, Task> action, int maxConcurrency, CancellationToken cancellationToken = default)
+    {
+        return stream.FlatMap(async x => { await action(x); return 0; }, maxConcurrency).DrainAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Explicit version of <see cref="ForEachAsync{T}(IStream{T}, Func{T, Task}, int, CancellationToken)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent operations.</param>
+    /// <param name="action">The asynchronous action to execute for each element.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when all elements have been processed.</returns>
+    public static Task ParallelForEachAsync<T>(this IStream<T> stream, int maxConcurrency, Func<T, Task> action, CancellationToken cancellationToken = default)
+    {
+        return stream.ForEachAsync(action, maxConcurrency, cancellationToken);
+    }
+
+    // Subscription-style Terminals
+
+    /// <summary>
+    /// Subscribes to the stream with callbacks for items, errors, and completion.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="onNext">The asynchronous action to execute for each element.</param>
+    /// <param name="onError">The asynchronous action to execute when the stream fails.</param>
+    /// <param name="onComplete">The asynchronous action to execute when the stream completes successfully.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the subscription lifecycle.</returns>
+    public static async Task SubscribeAsync<T>(this IStream<T> stream, Func<T, Task> onNext, Func<Exception, Task>? onError = null, Func<Task>? onComplete = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await foreach (var item in stream.WithCancellation(cancellationToken))
+            {
+                await onNext(item);
+            }
+
+            if (onComplete != null)
+            {
+                await onComplete();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Expected
+        }
+        catch (Exception ex)
+        {
+            if (onError != null)
+            {
+                await onError(ex);
+            }
+            else
+            {
+                throw;
+            }
+        }
+    }
+
+    // Drain / Ignore
+
+    /// <summary>
+    /// Terminal operation that consumes the stream and discards all items.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when the stream has been fully consumed.</returns>
+    public static async Task DrainAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        await foreach (var _ in stream.WithCancellation(cancellationToken))
+        {
+            // Discard
+        }
+    }
+
+    // Diagnostics-aware Terminals
+
+    /// <summary>
+    /// Executes the stream and returns a <see cref="StreamResult{T}"/> containing items, error, completion status, and duration.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the execution results.</returns>
+    public static async Task<StreamResult<T>> ExecuteAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
+    {
+        var clock = GetClock(stream);
+
+        var items = new List<T>();
+        Exception? error = null;
+        bool completed = false;
+        var startTime = clock.Now;
+
+        try
+        {
+            await foreach (var item in stream.WithCancellation(cancellationToken))
+            {
+                items.Add(item);
+            }
+            completed = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Partial completion
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+        }
+
+        var duration = clock.Now - startTime;
+        return new StreamResult<T>(items, error, completed, duration);
     }
 }

@@ -278,4 +278,159 @@ public class TerminalExtensionsTests
         var result = await stream.ElementAtOrNoneAsync(5);
         Assert.That(result.HasValue, Is.False);
     }
+
+    // Reduction Beyond Aggregate Tests
+
+    [Test]
+    public async Task ReduceAsync_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var result = await stream.ReduceAsync((acc, x) => acc + x);
+        Assert.That(result, Is.EqualTo(15));
+    }
+
+    [Test]
+    public async Task ScanLastAsync_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var result = await stream.ScanLastAsync(10, (acc, x) => acc + x);
+        Assert.That(result, Is.EqualTo(25));
+    }
+
+    [Test]
+    public async Task MaxByAsync_Works()
+    {
+        var stream = Stream.From(new[] { (1, "a"), (3, "c"), (2, "b") }.ToAsyncEnumerable());
+        var result = await stream.MaxByAsync(x => x.Item1);
+        Assert.That(result, Is.EqualTo((3, "c")));
+    }
+
+    [Test]
+    public async Task MinByAsync_Works()
+    {
+        var stream = Stream.From(new[] { (1, "a"), (3, "c"), (2, "b") }.ToAsyncEnumerable());
+        var result = await stream.MinByAsync(x => x.Item1);
+        Assert.That(result, Is.EqualTo((1, "a")));
+    }
+
+    // Bridging Terminals Tests
+
+    [Test]
+    public async Task ToChannel_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var reader = stream.ToChannel();
+        var list = new List<int>();
+        await foreach (var item in reader.ReadAllAsync())
+        {
+            list.Add(item);
+        }
+        Assert.That(list, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
+    public void ToEnumerableBlocking_Works()
+    {
+        var stream = Stream.Range(1, 5);
+        var result = stream.ToEnumerableBlocking().ToList();
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
+    public async Task AsAsyncEnumerable_Works()
+    {
+        var stream = Stream.Range(1, 3);
+        IAsyncEnumerable<int> asyncEnumerable = stream.AsAsyncEnumerable();
+        var list = new List<int>();
+        await foreach (var item in asyncEnumerable)
+        {
+            list.Add(item);
+        }
+        Assert.That(list, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    // Consumption Control Tests
+
+    [Test]
+    public async Task ForEachAsync_WithConcurrency_Works()
+    {
+        var stream = Stream.Range(1, 10);
+        var processed = new List<int>();
+        await stream.ForEachAsync(async x =>
+        {
+            await Task.Delay(10);
+            lock (processed) processed.Add(x);
+        }, maxConcurrency: 3);
+
+        Assert.That(processed.Count, Is.EqualTo(10));
+        Assert.That(processed, Is.EquivalentTo(Enumerable.Range(1, 10)));
+    }
+
+    // Subscription-style Terminals Tests
+
+    [Test]
+    public async Task SubscribeAsync_Works()
+    {
+        var stream = Stream.Range(1, 3);
+        var items = new List<int>();
+        bool completed = false;
+
+        await stream.SubscribeAsync(
+            onNext: async x => { items.Add(x); await Task.Yield(); },
+            onComplete: async () => { completed = true; await Task.Yield(); }
+        );
+
+        Assert.That(items, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(completed, Is.True);
+    }
+
+    [Test]
+    public async Task SubscribeAsync_HandlesError()
+    {
+        var stream = Stream.Error<int>(new Exception("test"));
+        Exception? caught = null;
+
+        await stream.SubscribeAsync(
+            onNext: x => Task.CompletedTask,
+            onError: async ex => { caught = ex; await Task.Yield(); }
+        );
+
+        Assert.That(caught?.Message, Is.EqualTo("test"));
+    }
+
+    // Drain / Ignore Tests
+
+    [Test]
+    public async Task DrainAsync_Works()
+    {
+        var count = 0;
+        var stream = Stream.Range(1, 5).DoOnNext(_ => count++);
+        await stream.DrainAsync();
+        Assert.That(count, Is.EqualTo(5));
+    }
+
+    // Diagnostics-aware Terminals Tests
+
+    [Test]
+    public async Task ExecuteAsync_Works_Success()
+    {
+        var stream = Stream.Range(1, 3);
+        var result = await stream.ExecuteAsync();
+
+        Assert.That(result.Items, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(result.Completed, Is.True);
+        Assert.That(result.Error, Is.Null);
+        Assert.That(result.Duration, Is.GreaterThan(TimeSpan.Zero));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_Works_Error()
+    {
+        var stream = Stream.Range(1, 2).MergeWith(Stream.Error<int>(new Exception("test")));
+        var result = await stream.ExecuteAsync();
+
+        Assert.That(result.Items, Is.EquivalentTo(new[] { 1, 2 }));
+        Assert.That(result.Completed, Is.False);
+        Assert.That(result.Error?.Message, Is.EqualTo("test"));
+    }
 }
