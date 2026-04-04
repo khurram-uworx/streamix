@@ -65,6 +65,50 @@ public static class Stream
                 yield return start + i;
             }
         }
+
+        public static async IAsyncEnumerable<T> Generate<TState, T>(TState initialState, Func<TState, GenerationResult<TState, T>> generator, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var state = initialState;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var result = generator(state);
+                if (result.IsComplete)
+                {
+                    yield break;
+                }
+
+                if (result.HasValue)
+                {
+                    yield return result.Value!;
+                }
+
+                state = result.NextState;
+            }
+        }
+
+        public static async IAsyncEnumerable<T> Generate<TState, T>(TState initialState, Func<TState, CancellationToken, ValueTask<GenerationResult<TState, T>>> generator, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var state = initialState;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var result = await generator(state, cancellationToken);
+                if (result.IsComplete)
+                {
+                    yield break;
+                }
+
+                if (result.HasValue)
+                {
+                    yield return result.Value!;
+                }
+
+                state = result.NextState;
+            }
+        }
     }
 
     internal static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
@@ -196,4 +240,26 @@ public static class Stream
     /// <param name="producer">A function that uses the emitter to produce items.</param>
     /// <returns>A stream created from the emitter.</returns>
     public static IStream<T> Create<T>(Func<IStreamEmitter<T>, Task> producer) => Stream<T>.Create(producer);
+
+    /// <summary>
+    /// Creates a stream by statefully generating elements.
+    /// </summary>
+    /// <typeparam name="TState">The type of the state.</typeparam>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="initialState">The initial state.</param>
+    /// <param name="generator">The state transition and emission function.</param>
+    /// <returns>A statefully generated stream.</returns>
+    public static IStream<T> Generate<TState, T>(TState initialState, Func<TState, GenerationResult<TState, T>> generator)
+        => From(AsyncEnumerable.Generate(initialState, generator));
+
+    /// <summary>
+    /// Creates a stream by statefully generating elements asynchronously.
+    /// </summary>
+    /// <typeparam name="TState">The type of the state.</typeparam>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="initialState">The initial state.</param>
+    /// <param name="generator">The asynchronous state transition and emission function.</param>
+    /// <returns>A statefully generated stream.</returns>
+    public static IStream<T> Generate<TState, T>(TState initialState, Func<TState, CancellationToken, ValueTask<GenerationResult<TState, T>>> generator)
+        => From(AsyncEnumerable.Generate(initialState, generator));
 }
