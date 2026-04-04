@@ -2,6 +2,8 @@ namespace Streamix;
 
 /// <summary>
 /// Represents a stream that can have 0 or 1 item, backed by <see cref="IAsyncEnumerable{T}"/>.
+/// The 0..1 cardinality is strictly enforced; if the underlying source produces more than one item,
+/// an <see cref="InvalidOperationException"/> will be thrown during enumeration or terminal execution.
 /// </summary>
 /// <typeparam name="T">The type of item in the single-item stream.</typeparam>
 public interface ISingle<T> : IAsyncEnumerable<T>

@@ -160,14 +160,15 @@ public sealed class Single<T> : ISingle<T>
             {
                 await using (enumerator)
                 {
+                    bool hasValue = false;
+                    T current = default!;
+
                     while (true)
                     {
-                        T current = default!;
                         bool hasNext;
                         try
                         {
                             hasNext = await enumerator.MoveNextAsync();
-                            if (hasNext) current = enumerator.Current;
                         }
                         catch (Exception ex)
                         {
@@ -178,13 +179,33 @@ public sealed class Single<T> : ISingle<T>
 
                         if (hasNext)
                         {
-                            yield return current;
-                            yield break; // Single should only emit one item
+                            if (hasValue)
+                                throw new InvalidOperationException("Sequence contains more than one element.");
+
+                            current = enumerator.Current;
+                            hasValue = true;
                         }
                         else
                         {
-                            yield break;
+                            if (hasValue)
+                            {
+                                yield return current;
+                                yield break;
+                            }
+                            else
+                            {
+                                yield break;
+                            }
                         }
+                    }
+
+                    if (failed)
+                    {
+                        // continue to retry logic below
+                    }
+                    else if (hasValue)
+                    {
+                        yield break;
                     }
                 }
             }
@@ -219,7 +240,7 @@ public sealed class Single<T> : ISingle<T>
 
     async IAsyncEnumerable<T> timeout(TimeSpan interval, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await using var enumerator = this.GetAsyncEnumerator(cancellationToken);
+        await using var enumerator = source.GetAsyncEnumerator(cancellationToken);
 
         var moveNextTask = enumerator.MoveNextAsync().AsTask();
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -313,7 +334,7 @@ public sealed class Single<T> : ISingle<T>
     /// <inheritdoc />
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        return source.GetAsyncEnumerator(cancellationToken);
+        return Single.EnforceAtMostOne(source, cancellationToken).GetAsyncEnumerator(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -388,18 +409,28 @@ public sealed class Single<T> : ISingle<T>
     /// <inheritdoc />
     public async Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
     {
+        bool hasValue = false;
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
             action(item);
+            hasValue = true;
         }
     }
 
     /// <inheritdoc />
     public async Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default)
     {
+        bool hasValue = false;
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
             await action(item);
+            hasValue = true;
         }
     }
 
@@ -410,11 +441,11 @@ public sealed class Single<T> : ISingle<T>
         bool hasValue = false;
         await foreach (var item in this.WithCancellation(cancellationToken))
         {
-            if (!hasValue)
-            {
-                result = item;
-                hasValue = true;
-            }
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
+            result = item;
+            hasValue = true;
         }
         return result;
     }

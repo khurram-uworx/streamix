@@ -55,12 +55,27 @@ public static class Single
             yield return item;
     }
 
+    internal static async IAsyncEnumerable<T> EnforceAtMostOne<T>(IAsyncEnumerable<T> source, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        bool hasValue = false;
+        await foreach (var item in source.WithCancellation(ct))
+        {
+            if (hasValue)
+                throw new InvalidOperationException("Sequence contains more than one element.");
+
+            yield return item;
+            hasValue = true;
+        }
+    }
+
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/>.
+    /// Cardinality is strictly enforced to 0..1 items.
     /// </summary>
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="source">The source asynchronous enumerable.</param>
     /// <returns>A single-item stream wrapping the source.</returns>
+    /// <exception cref="InvalidOperationException">The source emits more than one element during enumeration.</exception>
     public static ISingle<T> From<T>(IAsyncEnumerable<T> source) => new Single<T>(source);
 
     /// <summary>
