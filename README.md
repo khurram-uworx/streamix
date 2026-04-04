@@ -125,6 +125,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `Map` / `MapAwait`
 * `Filter` / `FilterAwait`
 * `FlatMap` / `FlatMapAwait`
+* `Generate`
 * `FlatMapMany` / `FlatMapManyAwait`
 * `ParallelMap`, `ParallelMapOrdered`
 * `Take` / `Skip`
