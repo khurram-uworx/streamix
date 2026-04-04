@@ -33,7 +33,7 @@ The default mental model is:
 
 ```csharp
 IStream<int> numbers = Stream.Range(1, 10);
-````
+```
 
 ### `Single<T>`
 * Represents a stream of 0..1 values.
@@ -200,6 +200,58 @@ IStream<int> fromChannel = Stream.FromChannel(channel);
 
 await Stream.Range(1, 3).ToChannel(channel.Writer, completeWriter: true);
 ```
+
+---
+
+## 🏗️ Creation Operators
+
+Streamix provides a rich set of operators to create streams from various sources.
+
+### `Stream.Create<T>`
+For complex sources, callbacks, or event-driven systems.
+```csharp
+var stream = Stream.Create<int>(async emitter => {
+    await emitter.EmitAsync(1);
+    if (someCondition) {
+        emitter.Fail(new Exception("Oops"));
+    } else {
+        emitter.Complete();
+    }
+});
+```
+*   **Backpressure**: `EmitAsync` awaits if the downstream consumer is slow.
+*   **Cancellation**: Check `emitter.CancellationToken` to stop producing.
+
+### `Stream.Defer<T>` / `Single.Defer<T>`
+Lazy creation: the factory is called once per subscriber.
+```csharp
+var stream = Stream.Defer(() => Stream.From(DateTime.Now.Ticks));
+```
+
+### `Stream.Generate<TState, T>`
+Stateful generation of sequences.
+```csharp
+var stream = Stream.Generate(0, state =>
+    state < 10 ? GenerationResult<int, int>.Emit(state, state + 1)
+               : GenerationResult<int, int>.Complete());
+```
+
+### `Stream.Interval`
+Periodic emissions based on time.
+```csharp
+var stream = Stream.Interval(TimeSpan.FromSeconds(1));
+```
+*   **Backpressure**: Does not accumulate ticks. If a consumer is slow, the next interval starts only after the consumer is ready.
+
+### `Stream.From` / `Single.From` / `Just`
+Shorthands for values, Tasks, and Async Enumerables.
+```csharp
+Stream.Just(42);
+Stream.From(Task.FromResult("hello"));
+Single.From(async ct => await FetchData(ct));
+```
+
+---
 
 ### AsyncRx.NET
 

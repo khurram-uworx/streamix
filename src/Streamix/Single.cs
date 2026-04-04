@@ -77,6 +77,14 @@ public static class Single
     public static ISingle<T> From<T>(T value) => From(AsyncEnumerableInternal.Just(value));
 
     /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from a single value. Alias for <see cref="From{T}(T)"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="value">The value to emit.</param>
+    /// <returns>A single-item stream that emits the specified value and then completes.</returns>
+    public static ISingle<T> Just<T>(T value) => From(value);
+
+    /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a <see cref="Task{T}"/>.
     /// </summary>
     /// <typeparam name="T">The type of item in the stream.</typeparam>

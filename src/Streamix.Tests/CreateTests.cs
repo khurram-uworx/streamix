@@ -16,8 +16,9 @@ public class CreateTests
             emitter.Complete();
         });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(1, 2, 3)
+            .AssertComplete();
     }
 
     [Test]
@@ -42,7 +43,7 @@ public class CreateTests
     }
 
     [Test]
-    public void Create_Propagates_Error_Via_Fail()
+    public async Task Create_Propagates_Error_Via_Fail()
     {
         var stream = Stream.Create<int>(emitter =>
         {
@@ -50,11 +51,12 @@ public class CreateTests
             return Task.CompletedTask;
         });
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Test Error")));
     }
 
     [Test]
-    public void Create_Propagates_Producer_Exception()
+    public async Task Create_Propagates_Producer_Exception()
     {
         var stream = Stream.Create<int>(async emitter =>
         {
@@ -62,7 +64,8 @@ public class CreateTests
             throw new InvalidOperationException("Producer Exception");
         });
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Producer Exception")));
     }
 
     [Test]
@@ -83,12 +86,14 @@ public class CreateTests
         });
 
         var cts = new CancellationTokenSource();
-        var consumeTask = stream.ToListAsync(cts.Token);
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(stream, cts.Token);
 
         await Task.Delay(100);
-        cts.Cancel();
+        await cts.CancelAsync();
 
-        Assert.ThrowsAsync<OperationCanceledException>(async () => await consumeTask);
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
         Assert.That(await producerCancelled.Task, Is.True);
     }
 
@@ -103,8 +108,9 @@ public class CreateTests
             emitter.Complete();
         });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.Empty);
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValueCount(0)
+            .AssertComplete();
     }
 
     [Test]

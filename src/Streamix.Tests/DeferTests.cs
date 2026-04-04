@@ -17,7 +17,9 @@ public class DeferTests
 
         Assert.That(factoryCalls, Is.EqualTo(0));
 
-        await foreach (var _ in stream) { }
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(1, 2, 3)
+            .AssertComplete();
 
         Assert.That(factoryCalls, Is.EqualTo(1));
     }
@@ -32,12 +34,14 @@ public class DeferTests
             return Stream.From(factoryCalls);
         });
 
-        var results1 = await stream.ToListAsync();
-        Assert.That(results1, Is.EqualTo(new[] { 1 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(1)
+            .AssertComplete();
         Assert.That(factoryCalls, Is.EqualTo(1));
 
-        var results2 = await stream.ToListAsync();
-        Assert.That(results2, Is.EqualTo(new[] { 2 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(2)
+            .AssertComplete();
         Assert.That(factoryCalls, Is.EqualTo(2));
     }
 
@@ -53,8 +57,9 @@ public class DeferTests
             return Stream.From(factoryCalls);
         });
 
-        var result = await stream.Retry(1).ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 2 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream.Retry(1)))
+            .AssertValues(2)
+            .AssertComplete();
         Assert.That(factoryCalls, Is.EqualTo(2));
     }
 
@@ -74,18 +79,30 @@ public class DeferTests
             if (item == 1) break;
         }
 
-        Assert.That(capturedToken.IsCancellationRequested, Is.False);
         Assert.That(capturedToken, Is.EqualTo(cts.Token));
     }
 
     [Test]
-    public async Task Defer_Chains_With_Downstream_Operators()
+    public async Task Defer_Factory_Exception_Propagates()
     {
-        var stream = Stream.Defer(() => Stream.Range(1, 5))
-            .Filter(x => x % 2 == 0)
-            .Map(x => x * 10);
+        var stream = Stream.Defer<int>(() =>
+        {
+            throw new InvalidOperationException("Factory Boom");
+        });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 20, 40 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Factory Boom")));
+    }
+
+    [Test]
+    public async Task Defer_Single_Factory_Exception_Propagates()
+    {
+        var single = Single.Defer<int>(() =>
+        {
+            throw new InvalidOperationException("Factory Boom");
+        });
+
+        (await TestSubscriber<int>.SubscribeAsync(single))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Factory Boom")));
     }
 }

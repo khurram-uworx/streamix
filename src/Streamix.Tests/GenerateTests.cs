@@ -14,8 +14,9 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1, 2, 3, 4)
+            .AssertComplete();
     }
 
     [Test]
@@ -26,8 +27,19 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        var result = await stream.Take(5).ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream.Take(5)))
+            .AssertValues(0, 1, 2, 3, 4)
+            .AssertComplete();
+    }
+
+    [Test]
+    public async Task Generate_Sync_Empty_Completes_Immediately()
+    {
+        var stream = Stream.Generate<int, int>(0, state => GenerationResult<int, int>.Complete());
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValueCount(0)
+            .AssertComplete();
     }
 
     [Test]
@@ -40,8 +52,9 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 0, 2, 4, 6, 8 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 2, 4, 6, 8)
+            .AssertComplete();
     }
 
     [Test]
@@ -54,8 +67,9 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        var result = await stream.ToListAsync();
-        Assert.That(result, Is.EqualTo(new[] { 0, 1, 2, 3, 4 }));
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1, 2, 3, 4)
+            .AssertComplete();
     }
 
     [Test]
@@ -70,17 +84,19 @@ public class GenerateTests
         });
 
         using var cts = new CancellationTokenSource();
-        var consumeTask = stream.ToListAsync(cts.Token);
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(stream, cts.Token);
 
         await Task.Delay(150);
         await cts.CancelAsync();
 
-        Assert.CatchAsync<OperationCanceledException>(async () => await consumeTask);
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(1);
+        subscriber.AssertNotComplete();
         Assert.That(generationCount, Is.LessThan(5));
     }
 
     [Test]
-    public void Generate_Sync_Propagates_Exception()
+    public async Task Generate_Sync_Propagates_Exception()
     {
         var stream = Stream.Generate<int, int>(0, state =>
         {
@@ -88,11 +104,13 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1)
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Generation Error")));
     }
 
     [Test]
-    public void Generate_Async_Propagates_Exception()
+    public async Task Generate_Async_Propagates_Exception()
     {
         var stream = Stream.Generate<int, int>(0, async (state, ct) =>
         {
@@ -101,6 +119,8 @@ public class GenerateTests
             return GenerationResult<int, int>.Emit(state, state + 1);
         });
 
-        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(0, 1)
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Async Generation Error")));
     }
 }
