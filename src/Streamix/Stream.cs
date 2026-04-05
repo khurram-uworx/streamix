@@ -137,7 +137,43 @@ public static class Stream
             {
                 await tcs.Task;
             }
+
+            throw new OperationCanceledException(cancellationToken);
             yield break;
+        }
+
+        public static async IAsyncEnumerable<long> Timer(TimeSpan dueTime, IClock clock, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (dueTime < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(dueTime));
+
+            if (dueTime > TimeSpan.Zero)
+            {
+                await clock.Delay(dueTime, cancellationToken);
+            }
+            else
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            yield return 0L;
+        }
+
+        public static async IAsyncEnumerable<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll, IClock clock, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (dueTime < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(dueTime));
+            if (period <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(period));
+
+            if (dueTime > TimeSpan.Zero)
+            {
+                await clock.Delay(dueTime, cancellationToken);
+            }
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return await poll(cancellationToken);
+                await clock.Delay(period, cancellationToken);
+            }
         }
     }
 
@@ -299,6 +335,43 @@ public static class Stream
     internal static IStream<long> Interval(TimeSpan dueTime, TimeSpan period, IClock clock) => From(AsyncEnumerable.Interval(dueTime, period, clock), clock);
 
     /// <summary>
+    /// Returns a stream that emits a single 0L after an initial delay and then completes.
+    /// </summary>
+    /// <param name="dueTime">The delay before emitting the item.</param>
+    /// <returns>A stream that emits 0L after the delay.</returns>
+    public static IStream<long> Timer(TimeSpan dueTime) => From(AsyncEnumerable.Timer(dueTime, SystemClock.Instance));
+
+    internal static IStream<long> Timer(TimeSpan dueTime, IClock clock) => From(AsyncEnumerable.Timer(dueTime, clock), clock);
+
+    /// <summary>
+    /// Returns a stream that emits the result of a polling function every specified time interval.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="interval">The time interval between polling attempts.</param>
+    /// <param name="poll">The function to invoke for each polling attempt.</param>
+    /// <returns>A stream that emits the results of the polling function.</returns>
+    public static IStream<T> Poll<T>(TimeSpan interval, Func<CancellationToken, ValueTask<T>> poll) => Poll(interval, interval, poll);
+
+    /// <summary>
+    /// Returns a stream that emits the result of a polling function after an initial delay, and then every specified time interval.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="dueTime">The initial delay before the first polling attempt.</param>
+    /// <param name="period">The time interval between subsequent polling attempts.</param>
+    /// <param name="poll">The function to invoke for each polling attempt.</param>
+    /// <returns>A stream that emits the results of the polling function.</returns>
+    public static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll) => From(AsyncEnumerable.Poll(dueTime, period, poll, SystemClock.Instance));
+
+    internal static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll, IClock clock) => From(AsyncEnumerable.Poll(dueTime, period, poll, clock), clock);
+
+    /// <summary>
+    /// Creates a stream that never emits any items and never completes.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <returns>A stream that never emits and never completes.</returns>
+    public static IStream<T> Never<T>() => From(AsyncEnumerable.Never<T>());
+
+    /// <summary>
     /// Creates a stream that reads all items from the specified <see cref="ChannelReader{T}"/>.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -377,13 +450,6 @@ public static class Stream
     /// <returns>A statefully generated stream.</returns>
     public static IStream<T> Generate<TState, T>(TState initialState, Func<TState, GenerationResult<TState, T>> generator)
         => From(AsyncEnumerable.Generate(initialState, generator));
-
-    /// <summary>
-    /// Creates a stream that never emits any items and never completes.
-    /// </summary>
-    /// <typeparam name="T">The type of items in the stream.</typeparam>
-    /// <returns>A stream that never emits and never completes.</returns>
-    public static IStream<T> Never<T>() => From(AsyncEnumerable.Never<T>());
 
     /// <summary>
     /// Creates a stream by statefully generating elements asynchronously.

@@ -131,6 +131,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `Take` / `Skip`
 * `Merge` / `Zip`
 * `Buffer` / `Window`
+* `Never` / `Timer` / `Poll`
 * `Throttle` / `Delay`
 * `Retry` / `Retry(..., backoffStrategy)` / `Timeout`
 * `OnErrorResume` / `OnErrorReturn` / `OnErrorMap`
@@ -243,6 +244,22 @@ Periodic emissions based on time.
 var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 ```
 *   **Backpressure**: Does not accumulate ticks. If a consumer is slow, the next interval starts only after the consumer is ready.
+
+### `Stream.Timer`
+Emits a single `0L` after a delay.
+```csharp
+var stream = Stream.Timer(TimeSpan.FromSeconds(1));
+```
+
+### `Stream.Poll`
+Repeatedly calls an async function at a fixed interval.
+```csharp
+var stream = Stream.Poll(TimeSpan.FromSeconds(1), async ct => await FetchData(ct));
+```
+*   **Backpressure**: Like `Interval`, it does not accumulate ticks. The next poll starts only after the current one finishes and the consumer is ready.
+
+### `Stream.Never`
+A stream that never emits and never completes. Useful for testing or as a base for combining with other streams.
 
 ### `Stream.From` / `Single.From` / `Just`
 Shorthands for values, Tasks, and Async Enumerables.
