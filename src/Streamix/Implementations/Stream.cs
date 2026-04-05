@@ -1384,11 +1384,6 @@ public sealed class Stream<T> : IStream<T>
             {
                 await writer.WriteAsync(enumerator.Current, cancellationToken);
             }
-
-            if (completeWriter)
-            {
-                writer.TryComplete();
-            }
         }
         catch (Exception ex)
         {
@@ -1403,6 +1398,11 @@ public sealed class Stream<T> : IStream<T>
             if (enumerator != null)
             {
                 await enumerator.DisposeAsync();
+            }
+
+            if (completeWriter)
+            {
+                writer.TryComplete();
             }
         }
     }
