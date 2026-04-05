@@ -129,6 +129,16 @@ public static class Stream
                 yield return item;
             }
         }
+
+        public static async IAsyncEnumerable<T> Never<T>([EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            using (cancellationToken.Register(() => tcs.TrySetCanceled()))
+            {
+                await tcs.Task;
+            }
+            yield break;
+        }
     }
 
     internal static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
@@ -367,6 +377,13 @@ public static class Stream
     /// <returns>A statefully generated stream.</returns>
     public static IStream<T> Generate<TState, T>(TState initialState, Func<TState, GenerationResult<TState, T>> generator)
         => From(AsyncEnumerable.Generate(initialState, generator));
+
+    /// <summary>
+    /// Creates a stream that never emits any items and never completes.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <returns>A stream that never emits and never completes.</returns>
+    public static IStream<T> Never<T>() => From(AsyncEnumerable.Never<T>());
 
     /// <summary>
     /// Creates a stream by statefully generating elements asynchronously.

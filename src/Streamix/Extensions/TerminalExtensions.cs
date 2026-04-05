@@ -1,5 +1,6 @@
 using Streamix.Implementations;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Channels;
 
 namespace Streamix;
@@ -14,6 +15,39 @@ public static class TerminalExtensions
         if (stream is Stream<T> s) return s.Clock;
         if (stream is ConnectableStream<T> cs) return cs.Clock;
         return Streamix.Concurrency.SystemClock.Instance;
+    }
+
+    /// <summary>
+    /// Determines whether the stream contains a specific element by using the default equality comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="value">The value to locate in the stream.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns true if the stream contains an element that has the specified value; otherwise, false.</returns>
+    public static Task<bool> ContainsAsync<T>(this IStream<T> stream, T value, CancellationToken cancellationToken = default)
+    {
+        return stream.ContainsAsync(value, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Determines whether the stream contains a specific element by using a specified <see cref="IEqualityComparer{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="value">The value to locate in the stream.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{T}"/> to compare values.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns true if the stream contains an element that has the specified value; otherwise, false.</returns>
+    public static async Task<bool> ContainsAsync<T>(this IStream<T> stream, T value, IEqualityComparer<T>? comparer, CancellationToken cancellationToken = default)
+    {
+        comparer ??= EqualityComparer<T>.Default;
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (comparer.Equals(item, value))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -159,6 +193,69 @@ public static class TerminalExtensions
             dict.Add(keySelector(item), valueSelector(item));
         }
         return dict;
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a <see cref="ILookup{TKey, T}"/> using a key selector.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a lookup with keys from the selector and values as stream items.</returns>
+    public static Task<ILookup<TKey, T>> ToLookupAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, CancellationToken cancellationToken = default)
+    {
+        return stream.ToLookupAsync(keySelector, x => x, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a <see cref="ILookup{TKey, T}"/> using a key selector and specified comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a lookup with keys from the selector and values as stream items.</returns>
+    public static Task<ILookup<TKey, T>> ToLookupAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default)
+    {
+        return stream.ToLookupAsync(keySelector, x => x, comparer, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a <see cref="ILookup{TKey, TValue}"/> using key and value selectors.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <typeparam name="TValue">The type of the value.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="valueSelector">A function to extract the value from each item.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a lookup with selected keys and values.</returns>
+    public static Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, CancellationToken cancellationToken = default)
+    {
+        return stream.ToLookupAsync(keySelector, valueSelector, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects all items from the stream into a <see cref="ILookup{TKey, TValue}"/> using key and value selectors and specified comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <typeparam name="TValue">The type of the value.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="keySelector">A function to extract the key from each item.</param>
+    /// <param name="valueSelector">A function to extract the value from each item.</param>
+    /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns a lookup with selected keys and values.</returns>
+    public static async Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default)
+    {
+        var list = await stream.ToListAsync(cancellationToken);
+        return list.ToLookup(keySelector, valueSelector, comparer);
     }
 
     // LINQ Terminals
