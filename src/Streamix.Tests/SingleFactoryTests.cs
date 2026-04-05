@@ -160,6 +160,70 @@ public class SingleFactoryTests
     }
 
     [Test]
+    public async Task StreamFrom_ValueTask_Emits_Item()
+    {
+        var stream = Stream.From(ValueTask.FromResult(42));
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(42)
+            .AssertComplete();
+    }
+
+    [Test]
+    public async Task StreamFrom_FuncValueTask_IsLazy_And_Reinvoked_Per_Subscription()
+    {
+        var count = 0;
+        var stream = Stream.From(new Func<ValueTask<int>>(async () =>
+        {
+            count++;
+            await Task.Yield();
+            return count;
+        }));
+
+        Assert.That(count, Is.EqualTo(0));
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(1)
+            .AssertComplete();
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertValues(2)
+            .AssertComplete();
+    }
+
+    [Test]
+    public async Task StreamFrom_FuncCTValueTask_RespectsCancellation()
+    {
+        var cts = new CancellationTokenSource();
+        var stream = Stream.From(new Func<CancellationToken, ValueTask<int>>(async ct =>
+        {
+            await Task.Delay(1000, ct);
+            return 42;
+        }));
+
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(stream, cts.Token);
+        await Task.Delay(10);
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task StreamFrom_FuncValueTask_PropagatesException()
+    {
+        var stream = Stream.From(new Func<ValueTask<int>>(async () =>
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("Boom");
+        }));
+
+        (await TestSubscriber<int>.SubscribeAsync(stream))
+            .AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("Boom")));
+    }
+
+    [Test]
     public async Task From_FuncTask_PropagatesException()
     {
         var single = Single.From(new Func<Task<int>>(async () =>

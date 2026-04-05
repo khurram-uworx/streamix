@@ -277,7 +277,12 @@ public static IStream<T> Poll<T>(
     Func<CancellationToken, ValueTask<T>> poll)
 ```
 
-This can also be expressed later as documentation built from `Interval`, but it is a real enough boundary pattern that a first-class helper may be justified.
+Semantics:
+
+- cold by default
+- first poll occurs after the interval elapses
+- passes the subscriber token into the poll callback
+- does not accumulate timer backlog when the consumer is slow
 
 #### Event and callback helpers
 

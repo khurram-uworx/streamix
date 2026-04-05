@@ -265,6 +265,252 @@ public class TimeBasedOperatorTests
     }
 
     [Test]
+    public async Task Timer_ShouldEmit_Single_Zero_After_DueTime()
+    {
+        var clock = new TestClock();
+        var timer = Stream.Timer(TimeSpan.FromSeconds(2), clock);
+
+        var subscriber = new TestSubscriber<long>();
+        var task = Task.Run(() => subscriber.RunAsync(timer, default));
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(subscriber.Items, Is.Empty);
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(2));
+        await task;
+
+        Assert.That(subscriber.Items, Is.EqualTo(new[] { 0L }));
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Timer_With_Zero_DueTime_ShouldEmit_Immediately()
+    {
+        var clock = new TestClock();
+        var timer = Stream.Timer(TimeSpan.Zero, clock);
+
+        var subscriber = await TestSubscriber<long>.SubscribeAsync(timer);
+
+        subscriber.AssertValues(0L);
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Timer_ShouldRespectCancellation()
+    {
+        var clock = new TestClock();
+        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+        using var cts = new CancellationTokenSource();
+
+        var subscribeTask = TestSubscriber<long>.SubscribeAsync(timer, cts.Token);
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public void Timer_ShouldThrowForNegativeDueTime()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            var timer = Stream.Timer(TimeSpan.FromSeconds(-1));
+            await foreach (var item in timer) { }
+        });
+    }
+
+    [Test]
+    public async Task Timer_ShouldBe_Cold_Per_Subscription()
+    {
+        var clock = new TestClock();
+        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+
+        var first = new TestSubscriber<long>();
+        var firstTask = Task.Run(() => first.RunAsync(timer, default));
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await firstTask;
+
+        var second = new TestSubscriber<long>();
+        var secondTask = Task.Run(() => second.RunAsync(timer, default));
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(second.Items, Is.Empty);
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await secondTask;
+
+        first.AssertValues(0L);
+        first.AssertComplete();
+        second.AssertValues(0L);
+        second.AssertComplete();
+    }
+
+    [Test]
+    public async Task Poll_ShouldEmit_Results_On_Each_Interval()
+    {
+        var clock = new TestClock();
+        var calls = 0;
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(++calls), clock);
+
+        var subscriber = new TestSubscriber<int>();
+        var task = Task.Run(() => subscriber.RunAsync(poll.Take(3), default));
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(subscriber.Items, Is.Empty);
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && subscriber.Items.Count < 1; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Is.EqualTo(new[] { 1 }));
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && subscriber.Items.Count < 2; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Is.EqualTo(new[] { 1, 2 }));
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await task;
+
+        Assert.That(subscriber.Items, Is.EqualTo(new[] { 1, 2, 3 }));
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Poll_ShouldPropagate_CancellationToken()
+    {
+        var clock = new TestClock();
+        CancellationToken observedToken = default;
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct =>
+        {
+            observedToken = ct;
+            return ValueTask.FromResult(42);
+        }, clock);
+
+        using var cts = new CancellationTokenSource();
+        var subscriberTask = TestSubscriber<int>.SubscribeAsync(poll.Take(1), cts.Token);
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+
+        var subscriber = await subscriberTask;
+        subscriber.AssertValues(42);
+        subscriber.AssertComplete();
+        Assert.That(observedToken, Is.EqualTo(cts.Token));
+    }
+
+    [Test]
+    public async Task Poll_ShouldRespect_Cancellation_While_Waiting()
+    {
+        var clock = new TestClock();
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(1), clock);
+        using var cts = new CancellationTokenSource();
+
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(poll, cts.Token);
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public void Poll_ShouldThrowFor_NonPositive_Interval()
+    {
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            var poll = Stream.Poll<int>(TimeSpan.Zero, ct => ValueTask.FromResult(1));
+            await foreach (var item in poll) { }
+        });
+    }
+
+    [Test]
+    public void Poll_ShouldPropagate_Poll_Exception()
+    {
+        var clock = new TestClock();
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromException<int>(new InvalidOperationException("poll failed")), clock);
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await using var enumerator = poll.GetAsyncEnumerator();
+            var moveNextTask = enumerator.MoveNextAsync().AsTask();
+            await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+            clock.AdvanceBy(TimeSpan.FromSeconds(1));
+            await moveNextTask;
+        });
+    }
+
+    [Test]
+    public async Task Poll_ShouldBe_Cold_Per_Subscription()
+    {
+        var clock = new TestClock();
+        var calls = 0;
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(++calls), clock);
+
+        var first = new TestSubscriber<int>();
+        var firstTask = Task.Run(() => first.RunAsync(poll.Take(1), default));
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await firstTask;
+
+        var second = new TestSubscriber<int>();
+        var secondTask = Task.Run(() => second.RunAsync(poll.Take(1), default));
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        Assert.That(second.Items, Is.Empty);
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await secondTask;
+
+        first.AssertValues(1);
+        first.AssertComplete();
+        second.AssertValues(2);
+        second.AssertComplete();
+    }
+
+    [Test]
+    public async Task Poll_ShouldNotAccumulate_When_Consumer_Is_Slow()
+    {
+        var clock = new TestClock();
+        var calls = 0;
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(++calls), clock);
+        var semaphore = new SemaphoreSlim(0);
+        var results = new List<int>();
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in poll.Take(2))
+            {
+                results.Add(item);
+                await semaphore.WaitAsync();
+            }
+        });
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && results.Count < 1; i++) await Task.Delay(10);
+        Assert.That(results, Is.EqualTo(new[] { 1 }));
+        Assert.That(calls, Is.EqualTo(1));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(calls, Is.EqualTo(1));
+
+        semaphore.Release();
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && results.Count < 2; i++) await Task.Delay(10);
+        Assert.That(results, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(calls, Is.EqualTo(2));
+
+        semaphore.Release();
+        await task;
+    }
+
+    [Test]
     public void Interval_ShouldThrowForNegativeDueTime()
     {
         Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>

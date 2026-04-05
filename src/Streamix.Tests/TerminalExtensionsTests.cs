@@ -421,6 +421,14 @@ public class TerminalExtensionsTests
     }
 
     [Test]
+    public async Task MaxByAsync_With_Comparer_Works()
+    {
+        var stream = Stream.From(new[] { (1, "a"), (3, "c"), (2, "b") }.ToAsyncEnumerable());
+        var result = await stream.MaxByAsync(x => x.Item1, Comparer<int>.Create((x, y) => y.CompareTo(x)));
+        Assert.That(result, Is.EqualTo((1, "a")));
+    }
+
+    [Test]
     public void MinByAsync_Empty_Stream_Throws_InvalidOperationException()
     {
         var stream = Stream.Empty<int>();
@@ -450,6 +458,14 @@ public class TerminalExtensionsTests
 
         Assert.CatchAsync<OperationCanceledException>(async () =>
             await stream.MinByAsync(x => x, cts.Token));
+    }
+
+    [Test]
+    public async Task MinByAsync_With_Comparer_Works()
+    {
+        var stream = Stream.From(new[] { (1, "a"), (3, "c"), (2, "b") }.ToAsyncEnumerable());
+        var result = await stream.MinByAsync(x => x.Item1, Comparer<int>.Create((x, y) => y.CompareTo(x)));
+        Assert.That(result, Is.EqualTo((3, "c")));
     }
 
     // Bridging Terminals Tests
