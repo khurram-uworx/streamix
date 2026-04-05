@@ -122,7 +122,7 @@ The release target in `docs/VARIETY.md` is still incomplete without `ContainsAsy
 - `src/Streamix.Tests/TerminalExtensionsTests.cs`
 - `README.md`
 
-## Task 3: Add Comparer-Aware Boundary Polish
+## ✅ Task 3: Add Comparer-Aware Boundary Polish
 
 ### Priority
 

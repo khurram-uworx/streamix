@@ -1207,6 +1207,23 @@ public static class TerminalExtensions
     /// <exception cref="InvalidOperationException">The stream is empty.</exception>
     public static async Task<T> MaxByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
     {
+        return await stream.MaxByAsync(selector, comparer: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the element from the stream that has the maximum value according to a specified selector and comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key used for comparison.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="selector">A function to extract the comparison key from each element.</param>
+    /// <param name="comparer">The comparer used to order keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element with the maximum key value.</returns>
+    /// <exception cref="InvalidOperationException">The stream is empty.</exception>
+    public static async Task<T> MaxByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, IComparer<TKey>? comparer, CancellationToken cancellationToken = default)
+    {
+        comparer ??= Comparer<TKey>.Default;
         bool hasValue = false;
         T? maxItem = default;
         TKey? maxKey = default;
@@ -1214,7 +1231,7 @@ public static class TerminalExtensions
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             var key = selector(item);
-            if (!hasValue || key.CompareTo(maxKey!) > 0)
+            if (!hasValue || comparer.Compare(key, maxKey!) > 0)
             {
                 maxItem = item;
                 maxKey = key;
@@ -1240,6 +1257,23 @@ public static class TerminalExtensions
     /// <exception cref="InvalidOperationException">The stream is empty.</exception>
     public static async Task<T> MinByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
     {
+        return await stream.MinByAsync(selector, comparer: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the element from the stream that has the minimum value according to a specified selector and comparer.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <typeparam name="TKey">The type of the key used for comparison.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="selector">A function to extract the comparison key from each element.</param>
+    /// <param name="comparer">The comparer used to order keys.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the element with the minimum key value.</returns>
+    /// <exception cref="InvalidOperationException">The stream is empty.</exception>
+    public static async Task<T> MinByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, IComparer<TKey>? comparer, CancellationToken cancellationToken = default)
+    {
+        comparer ??= Comparer<TKey>.Default;
         bool hasValue = false;
         T? minItem = default;
         TKey? minKey = default;
@@ -1247,7 +1281,7 @@ public static class TerminalExtensions
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             var key = selector(item);
-            if (!hasValue || key.CompareTo(minKey!) < 0)
+            if (!hasValue || comparer.Compare(key, minKey!) < 0)
             {
                 minItem = item;
                 minKey = key;

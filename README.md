@@ -147,6 +147,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `SingleAsync` (and `OrDefault` variant)
 * `AggregateAsync` / `CountAsync` / `AnyAsync` / `AllAsync`
 * `MinAsync` / `MaxAsync`
+* `MinByAsync` / `MaxByAsync` (with comparer overloads)
 * `SumAsync` / `AverageAsync`
 
 `ISingle<T>` also supports `ToTask()`.
@@ -245,36 +246,28 @@ var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 ```
 *   **Backpressure**: Does not accumulate ticks. If a consumer is slow, the next interval starts only after the consumer is ready.
 
-### `Stream.Timer`
-Emits a single `0L` after a delay.
+### `Stream.Never`
+Non-terminating stream primitive.
 ```csharp
-var stream = Stream.Timer(TimeSpan.FromSeconds(1));
+var stream = Stream.Never<int>();
 ```
+*   **Semantics**: Never emits and never completes unless the subscriber cancels.
+
+### `Stream.Timer`
+Single delayed emission.
+```csharp
+var stream = Stream.Timer(TimeSpan.FromSeconds(5));
+```
+*   **Semantics**: Emits a single `0L` after the due time, then completes.
 
 ### `Stream.Poll`
-Repeatedly calls an async function at a fixed interval.
+Periodic async polling.
 ```csharp
-var stream = Stream.Poll(TimeSpan.FromSeconds(1), async ct => await FetchData(ct));
+var polled = Stream.Poll(
+    TimeSpan.FromSeconds(1),
+    async ct => await PollOnceAsync(ct));
 ```
-*   **Backpressure**: Like `Interval`, it does not accumulate ticks. The next poll starts only after the current one finishes and the consumer is ready.
-
-### `Stream.Never`
-A stream that never emits and never completes. Useful for testing or as a base for combining with other streams.
-
-### `Stream.Using<TResource, T>`
-Manages the lifetime of a resource (e.g., sockets, readers, subscriptions) per subscriber.
-```csharp
-var stream = Stream.Using(
-    () => new StreamReader("data.txt"),
-    reader => Stream.Create<string>(async emitter => {
-        while (!reader.EndOfStream) {
-            await emitter.EmitAsync(await reader.ReadLineAsync());
-        }
-    })
-);
-```
-*   **Disposal**: The resource is guaranteed to be disposed (via `Dispose` or `DisposeAsync`) when the stream completes, fails, or the subscription is cancelled.
-*   **Exceptions**: Standard C# semantics apply; if both the stream and the disposal throw, the disposal exception is propagated.
+*   **Semantics**: Cold by default, passes the subscriber cancellation token into the poll callback, and waits for each poll result before scheduling the next interval.
 
 ### `Stream.Using<TResource, T>`
 Manages the lifetime of a resource (e.g., sockets, readers, subscriptions) per subscriber.

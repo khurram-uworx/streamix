@@ -107,7 +107,7 @@ Decide whether `Stream` should mirror every new `Single` factory immediately or 
 - `src/Streamix.Tests/SingleFactoryTests.cs`
 - `README.md`
 
-## Task 3: Add Time-Primitives And Decide `Poll(...)`
+## ✅ Task 3: Add Time-Primitives And Decide `Poll(...)`
 
 ### Priority
 
@@ -121,18 +121,15 @@ Close the next time-based creation gaps with small primitives and an explicit pr
 
 The plan identifies `Never<T>()`, `Timer(TimeSpan)`, and possibly `Poll(...)` as the next meaningful building blocks after `Interval(...)`.
 
-### Decision required
+### Decision
 
-Decide whether `Poll(...)` should be:
-
-- a first-class core API in this release, or
-- documented as a composition pattern built from `Interval(...)` plus flattening operators
+`Poll(...)` is a first-class core API in this slice.
 
 ### Scope
 
 - Add `Stream.Never<T>()`
 - Add `Stream.Timer(TimeSpan)`
-- If approved, add `Stream.Poll<T>(TimeSpan interval, Func<CancellationToken, ValueTask<T>> poll)`
+- Add `Stream.Poll<T>(TimeSpan interval, Func<CancellationToken, ValueTask<T>> poll)`
 - Add tests for timing semantics, cancellation, completion, and non-accumulating behavior where relevant
 
 ### Constraints
@@ -144,7 +141,7 @@ Decide whether `Poll(...)` should be:
 
 - `Never<T>()` never emits and never completes unless cancelled
 - `Timer(TimeSpan)` emits a single `0L` after the delay and then completes
-- `Poll(...)`, if added, has explicit docs and tests for cancellation and repeated subscription behavior
+- `Poll(...)` has explicit docs and tests for cancellation and repeated subscription behavior
 
 ### Files likely involved
 
