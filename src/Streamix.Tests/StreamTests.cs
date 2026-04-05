@@ -272,6 +272,38 @@ public class StreamTests
     }
 
     [Test]
+    public async Task From_IEnumerable_Reenumerates_Per_Subscription()
+    {
+        var enumerations = 0;
+        IEnumerable<int> Source()
+        {
+            enumerations++;
+            yield return 1;
+            yield return 2;
+        }
+
+        var stream = Stream.From(Source());
+
+        Assert.That(await stream.ToListAsync(), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(await stream.ToListAsync(), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(enumerations, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void From_IEnumerable_Propagates_Enumeration_Exception()
+    {
+        IEnumerable<int> Source()
+        {
+            yield return 1;
+            throw new InvalidOperationException("Enumeration failure");
+        }
+
+        var stream = Stream.From(Source());
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
+
+    [Test]
     public async Task From_Params_Array_Emits_Correct_Values()
     {
         var stream = Stream.From(1, 2, 3);
@@ -279,6 +311,15 @@ public class StreamTests
         var result = await stream.ToListAsync();
 
         Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public async Task From_Params_Array_Reenumerates_Per_Subscription()
+    {
+        var stream = Stream.From(1, 2, 3);
+
+        Assert.That(await stream.ToListAsync(), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(await stream.ToListAsync(), Is.EqualTo(new[] { 1, 2, 3 }));
     }
 
     [Test]
