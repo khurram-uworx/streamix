@@ -244,6 +244,21 @@ var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 ```
 *   **Backpressure**: Does not accumulate ticks. If a consumer is slow, the next interval starts only after the consumer is ready.
 
+### `Stream.Using<TResource, T>`
+Manages the lifetime of a resource (e.g., sockets, readers, subscriptions) per subscriber.
+```csharp
+var stream = Stream.Using(
+    () => new StreamReader("data.txt"),
+    reader => Stream.Create<string>(async emitter => {
+        while (!reader.EndOfStream) {
+            await emitter.EmitAsync(await reader.ReadLineAsync());
+        }
+    })
+);
+```
+*   **Disposal**: The resource is guaranteed to be disposed (via `Dispose` or `DisposeAsync`) when the stream completes, fails, or the subscription is cancelled.
+*   **Exceptions**: Standard C# semantics apply; if both the stream and the disposal throw, the disposal exception is propagated.
+
 ### `Stream.From` / `Single.From` / `Just`
 Shorthands for values, Tasks, and Async Enumerables.
 

@@ -264,4 +264,132 @@ public class ResourceSafetyTests
         Assert.That(taskStarted, Is.GreaterThan(0));
         Assert.That(taskCancelled, Is.EqualTo(taskStarted));
     }
+
+    class MockResource : IDisposable, IAsyncDisposable
+    {
+        public int DisposeCount { get; private set; }
+        public bool ThrowOnDispose { get; set; }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+            if (ThrowOnDispose) throw new InvalidOperationException("Dispose failure");
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCount++;
+            if (ThrowOnDispose) throw new InvalidOperationException("DisposeAsync failure");
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    [Test]
+    public async Task Using_IDisposable_DisposesOnCompletion()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using(() => resource, r => Stream.Range(1, 5));
+
+        var result = await stream.ToListAsync();
+
+        Assert.That(result, Has.Count.EqualTo(5));
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_IDisposable_DisposesOnFailure()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using(() => resource, r => Stream.Error<int>(new Exception("Upstream failure")));
+
+        Assert.ThrowsAsync<Exception>(async () => await stream.ToListAsync());
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_IDisposable_DisposesOnCancellation()
+    {
+        var resource = new MockResource();
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Using(() => resource, r => Stream.Range(1, 100));
+
+        var count = 0;
+        try
+        {
+            await foreach (var item in stream.WithCancellation(cts.Token))
+            {
+                if (++count == 5) await cts.CancelAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_IAsyncDisposable_DisposesOnCompletion()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using(ct => ValueTask.FromResult(resource), r => Stream.Range(1, 5));
+
+        var result = await stream.ToListAsync();
+
+        Assert.That(result, Has.Count.EqualTo(5));
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_IAsyncDisposable_DisposesOnFailure()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using(ct => ValueTask.FromResult(resource), r => Stream.Error<int>(new Exception("Upstream failure")));
+
+        Assert.ThrowsAsync<Exception>(async () => await stream.ToListAsync());
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_IAsyncDisposable_DisposesOnCancellation()
+    {
+        var resource = new MockResource();
+        var cts = new CancellationTokenSource();
+        var stream = Stream.Using(ct => ValueTask.FromResult(resource), r => Stream.Range(1, 100));
+
+        var count = 0;
+        try
+        {
+            await foreach (var item in stream.WithCancellation(cts.Token))
+            {
+                if (++count == 5) await cts.CancelAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Using_PropagatesDisposalException()
+    {
+        var resource = new MockResource { ThrowOnDispose = true };
+        var stream = Stream.Using(() => resource, r => Stream.Range(1, 5));
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
+
+    [Test]
+    public async Task Using_CreatesFreshResourcePerSubscription()
+    {
+        var createCount = 0;
+        var stream = Stream.Using(() =>
+        {
+            createCount++;
+            return new MockResource();
+        }, r => Stream.Range(1, 3));
+
+        await stream.ToListAsync();
+        await stream.ToListAsync();
+
+        Assert.That(createCount, Is.EqualTo(2));
+    }
 }

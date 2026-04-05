@@ -139,6 +139,34 @@ public static class Stream
             }
             yield break;
         }
+
+        public static async IAsyncEnumerable<T> Using<TResource, T>(
+            Func<TResource> resourceFactory,
+            Func<TResource, IStream<T>> streamFactory,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            where TResource : IDisposable
+        {
+            using var resource = resourceFactory();
+            var source = streamFactory(resource);
+            await foreach (var item in source.WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
+
+        public static async IAsyncEnumerable<T> Using<TResource, T>(
+            Func<CancellationToken, ValueTask<TResource>> resourceFactory,
+            Func<TResource, IStream<T>> streamFactory,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            where TResource : IAsyncDisposable
+        {
+            await using var resource = await resourceFactory(cancellationToken);
+            var source = streamFactory(resource);
+            await foreach (var item in source.WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
     }
 
     internal static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
@@ -395,4 +423,34 @@ public static class Stream
     /// <returns>A statefully generated stream.</returns>
     public static IStream<T> Generate<TState, T>(TState initialState, Func<TState, CancellationToken, ValueTask<GenerationResult<TState, T>>> generator)
         => From(AsyncEnumerable.Generate(initialState, generator));
+
+    /// <summary>
+    /// Creates a stream that manages the lifetime of a resource.
+    /// The resource is created per subscription and disposed when the stream completes, fails, or is cancelled.
+    /// </summary>
+    /// <typeparam name="TResource">The type of the resource.</typeparam>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="resourceFactory">A factory function to create the resource.</param>
+    /// <param name="streamFactory">A factory function to create the stream using the resource.</param>
+    /// <returns>A stream that manages the resource lifetime.</returns>
+    public static IStream<T> Using<TResource, T>(
+        Func<TResource> resourceFactory,
+        Func<TResource, IStream<T>> streamFactory)
+        where TResource : IDisposable
+        => From(AsyncEnumerable.Using(resourceFactory, streamFactory));
+
+    /// <summary>
+    /// Creates a stream that manages the lifetime of an asynchronous resource.
+    /// The resource is created per subscription and disposed when the stream completes, fails, or is cancelled.
+    /// </summary>
+    /// <typeparam name="TResource">The type of the resource.</typeparam>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="resourceFactory">An asynchronous factory function to create the resource.</param>
+    /// <param name="streamFactory">A factory function to create the stream using the resource.</param>
+    /// <returns>A stream that manages the resource lifetime.</returns>
+    public static IStream<T> Using<TResource, T>(
+        Func<CancellationToken, ValueTask<TResource>> resourceFactory,
+        Func<TResource, IStream<T>> streamFactory)
+        where TResource : IAsyncDisposable
+        => From(AsyncEnumerable.Using(resourceFactory, streamFactory));
 }
