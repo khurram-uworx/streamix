@@ -131,6 +131,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `Take` / `Skip`
 * `Merge` / `Zip`
 * `Buffer` / `Window`
+* `Never` / `Timer` / `Poll`
 * `Throttle` / `Delay`
 * `Retry` / `Retry(..., backoffStrategy)` / `Timeout`
 * `OnErrorResume` / `OnErrorReturn` / `OnErrorMap`
@@ -244,6 +245,37 @@ var stream = Stream.Interval(TimeSpan.FromSeconds(1));
 ```
 *   **Backpressure**: Does not accumulate ticks. If a consumer is slow, the next interval starts only after the consumer is ready.
 
+### `Stream.Timer`
+Emits a single `0L` after a delay.
+```csharp
+var stream = Stream.Timer(TimeSpan.FromSeconds(1));
+```
+
+### `Stream.Poll`
+Repeatedly calls an async function at a fixed interval.
+```csharp
+var stream = Stream.Poll(TimeSpan.FromSeconds(1), async ct => await FetchData(ct));
+```
+*   **Backpressure**: Like `Interval`, it does not accumulate ticks. The next poll starts only after the current one finishes and the consumer is ready.
+
+### `Stream.Never`
+A stream that never emits and never completes. Useful for testing or as a base for combining with other streams.
+
+### `Stream.Using<TResource, T>`
+Manages the lifetime of a resource (e.g., sockets, readers, subscriptions) per subscriber.
+```csharp
+var stream = Stream.Using(
+    () => new StreamReader("data.txt"),
+    reader => Stream.Create<string>(async emitter => {
+        while (!reader.EndOfStream) {
+            await emitter.EmitAsync(await reader.ReadLineAsync());
+        }
+    })
+);
+```
+*   **Disposal**: The resource is guaranteed to be disposed (via `Dispose` or `DisposeAsync`) when the stream completes, fails, or the subscription is cancelled.
+*   **Exceptions**: Standard C# semantics apply; if both the stream and the disposal throw, the disposal exception is propagated.
+
 ### `Stream.Using<TResource, T>`
 Manages the lifetime of a resource (e.g., sockets, readers, subscriptions) per subscriber.
 ```csharp
@@ -343,7 +375,7 @@ var retried = stream
 
 Streamix is designed for high-performance asynchronous streaming with the following characteristics:
 
-- **Backpressure by Design**: Concurrent operators like `FlatMap`, `Merge`, and `ParallelMap` utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unbounded memory growth.
+- **Backpressure by Design**: Concurrent operators like `FlatMap`, `Merge`, and `ParallelMap` utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unboundemented memory growth.
 - **Zero-Allocation Sequential Operators**: Basic operators like `Map`, `Filter`, `Take`, and `Skip` are implemented as thin wrappers over `IAsyncEnumerable<T>` using async iterators. They introduce minimal overhead and do not involve intermediate buffering.
 - **Bounded Concurrency**: All flattening and parallel operators accept a `maxConcurrency` parameter, allowing you to strictly control the number of simultaneous asynchronous operations.
 - **Materialization Awareness**: Operators that require state across multiple items, such as `Buffer(count)`, `Window(count)`, or `Replay(bufferSize)`, involve allocations proportional to their requested size. These should be used with appropriate bounds to manage memory usage.

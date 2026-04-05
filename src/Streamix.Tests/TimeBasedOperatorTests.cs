@@ -293,4 +293,90 @@ public class TimeBasedOperatorTests
             await foreach (var item in interval) { }
         });
     }
+
+    [Test]
+    public async Task Never_ShouldNeverEmitOrComplete()
+    {
+        var never = Stream.Never<int>();
+        using var cts = new CancellationTokenSource();
+
+        var subscriber = new TestSubscriber<int>();
+        var task = Task.Run(() => subscriber.RunAsync(never, cts.Token));
+
+        await Task.Delay(100);
+        Assert.That(subscriber.Items, Is.Empty);
+        subscriber.AssertNotComplete();
+
+        await cts.CancelAsync();
+        await task;
+
+        // TestSubscriber catches OperationCanceledException and sets completed = false by default
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task Timer_ShouldEmitAfterDelayAndComplete()
+    {
+        var clock = new TestClock();
+        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+
+        var subscriber = new TestSubscriber<long>();
+        var task = Task.Run(() => subscriber.RunAsync(timer, default));
+
+        // Initially no items
+        Assert.That(subscriber.Items, Is.Empty);
+
+        // Wait for delay
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+
+        await task;
+        Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 0L }));
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Poll_ShouldEmitPeriodically()
+    {
+        var clock = new TestClock();
+        int counter = 0;
+        var poll = Stream.Poll(TimeSpan.Zero, TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(counter++), clock);
+
+        var subscriber = new TestSubscriber<int>();
+        var task = Task.Run(() => subscriber.RunAsync(poll.Take(3), default));
+
+        // First item emitted immediately (due to zero dueTime)
+        for (int i = 0; i < 100 && subscriber.Items.Count < 1; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 0 }));
+
+        // Advance 1s -> second item
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 100 && subscriber.Items.Count < 2; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 0, 1 }));
+
+        // Advance another 1s -> third item
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await task;
+        Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 0, 1, 2 }));
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Poll_ShouldRespectCancellation()
+    {
+        var clock = new TestClock();
+        var poll = Stream.Poll<int>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), ct => ValueTask.FromResult(1), clock);
+        using var cts = new CancellationTokenSource();
+
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(poll, cts.Token);
+
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNotComplete();
+    }
 }
