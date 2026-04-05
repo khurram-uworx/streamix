@@ -159,7 +159,7 @@ The current repo already has `MinByAsync(...)` and `MaxByAsync(...)`, but not th
 - `src/Streamix.Tests/TerminalExtensionsTests.cs`
 - `README.md`
 
-## Task 4: Introduce The Core Sink Abstraction
+## ✅ Task 4: Introduce The Core Sink Abstraction
 
 ### Priority
 
@@ -212,7 +212,7 @@ Confirm the exact core completion contract:
 - `src/Streamix/Implementations/ConnectableStream.cs`
 - `src/Streamix.Tests/TerminalExtensionsTests.cs`
 
-## Task 5: Rework Channel Output Onto The Shared Sink Path
+## ✅ Task 5: Rework Channel Output Onto The Shared Sink Path
 
 ### Priority
 
@@ -252,7 +252,7 @@ Channels are the current sink baseline. The release is not complete until that b
 - `src/Streamix.Tests/StreamTests.cs`
 - `src/Streamix.Tests/TerminalExtensionsTests.cs`
 
-## Task 6: Add The Delegate Sink Adapter
+## ✅ Task 6: Add The Delegate Sink Adapter
 
 ### Priority
 
@@ -292,7 +292,7 @@ Provide the smallest useful sink adapter for app-specific boundaries without req
 - `src/Streamix.Tests/TerminalExtensionsTests.cs`
 - `README.md`
 
-## Task 7: Update README And Examples For The Shipped Variety Surface
+## ✅ Task 7: Update README And Examples For The Shipped Variety Surface
 
 ### Priority
 

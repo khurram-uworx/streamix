@@ -1,11 +1,51 @@
 using NUnit.Framework;
-using Streamix;
 
 namespace Streamix.Tests;
 
 [TestFixture]
 public class TerminalExtensionsTests
 {
+    private sealed class RecordingSink<T> : IAsyncSink<T>
+    {
+        readonly Func<T, CancellationToken, ValueTask>? writeAsync;
+        readonly Func<Exception?, CancellationToken, ValueTask>? completeAsync;
+
+        public RecordingSink(Func<T, CancellationToken, ValueTask>? writeAsync = null, Func<Exception?, CancellationToken, ValueTask>? completeAsync = null)
+        {
+            this.writeAsync = writeAsync;
+            this.completeAsync = completeAsync;
+        }
+
+        public List<T> Items { get; } = new();
+
+        public int CompletionCount { get; private set; }
+
+        public Exception? CompletionError { get; private set; }
+
+        public ValueTask WriteAsync(T item, CancellationToken cancellationToken = default)
+        {
+            Items.Add(item);
+
+            if (writeAsync is null)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            return writeAsync(item, cancellationToken);
+        }
+
+        public async ValueTask CompleteAsync(Exception? error = null, CancellationToken cancellationToken = default)
+        {
+            CompletionCount++;
+            CompletionError = error;
+
+            if (completeAsync is not null)
+            {
+                await completeAsync(error, cancellationToken);
+            }
+        }
+    }
+
     // Materialization Tests
 
     [Test]
@@ -469,6 +509,202 @@ public class TerminalExtensionsTests
     }
 
     // Bridging Terminals Tests
+
+    [Test]
+    public async Task ToSinkAsync_Writes_All_Items_And_Completes_Sink()
+    {
+        var stream = Stream.Range(1, 5);
+        var sink = new RecordingSink<int>();
+
+        await stream.ToSinkAsync(sink);
+
+        Assert.That(sink.Items, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+        Assert.That(sink.CompletionCount, Is.EqualTo(1));
+        Assert.That(sink.CompletionError, Is.Null);
+    }
+
+    [Test]
+    public void ToSinkAsync_Propagates_Upstream_Error_And_Completes_Sink_With_Error()
+    {
+        var failure = new InvalidOperationException("upstream");
+        var stream = Stream.Range(1, 2).MergeWith(Stream.Error<int>(failure));
+        var sink = new RecordingSink<int>();
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToSinkAsync(sink));
+
+        Assert.That(exception, Is.SameAs(failure));
+        Assert.That(sink.Items, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(sink.CompletionCount, Is.EqualTo(1));
+        Assert.That(sink.CompletionError, Is.SameAs(failure));
+    }
+
+    [Test]
+    public void ToSinkAsync_Propagates_Sink_Write_Error_And_Completes_Sink_With_Error()
+    {
+        var failure = new InvalidOperationException("write");
+        var stream = Stream.Range(1, 5);
+        var sink = new RecordingSink<int>(writeAsync: (item, _) =>
+        {
+            if (item == 3)
+            {
+                throw failure;
+            }
+
+            return ValueTask.CompletedTask;
+        });
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToSinkAsync(sink));
+
+        Assert.That(exception, Is.SameAs(failure));
+        Assert.That(sink.Items, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(sink.CompletionCount, Is.EqualTo(1));
+        Assert.That(sink.CompletionError, Is.SameAs(failure));
+    }
+
+    [Test]
+    public async Task ToSinkAsync_LeaveSinkOpen_Does_Not_Complete_Sink()
+    {
+        var stream = Stream.Range(1, 3);
+        var sink = new RecordingSink<int>();
+
+        await stream.ToSinkAsync(sink, SinkCompletionMode.LeaveSinkOpen);
+
+        Assert.That(sink.Items, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(sink.CompletionCount, Is.EqualTo(0));
+        Assert.That(sink.CompletionError, Is.Null);
+    }
+
+    [Test]
+    public void ToSinkAsync_Cancellation_Does_Not_Complete_Sink()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var stream = Stream.Never<int>();
+        var sink = new RecordingSink<int>();
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await stream.ToSinkAsync(sink, cancellationToken: cts.Token));
+        Assert.That(sink.Items, Is.Empty);
+        Assert.That(sink.CompletionCount, Is.EqualTo(0));
+        Assert.That(sink.CompletionError, Is.Null);
+    }
+
+    [Test]
+    public void ToSinkAsync_Propagates_Completion_Error_On_Success()
+    {
+        var failure = new InvalidOperationException("complete");
+        var stream = Stream.Range(1, 2);
+        var sink = new RecordingSink<int>(completeAsync: (_, _) => ValueTask.FromException(failure));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToSinkAsync(sink));
+
+        Assert.That(exception, Is.SameAs(failure));
+        Assert.That(sink.Items, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(sink.CompletionCount, Is.EqualTo(1));
+        Assert.That(sink.CompletionError, Is.Null);
+    }
+
+    [Test]
+    public async Task ToSinkAsync_With_Delegate_Writes_All_Items()
+    {
+        var stream = Stream.Range(1, 4);
+        var items = new List<int>();
+        var completionCount = 0;
+
+        await stream.ToSinkAsync(
+            (item, _) =>
+            {
+                items.Add(item);
+                return ValueTask.CompletedTask;
+            },
+            completeAsync: (_, _) =>
+            {
+                completionCount++;
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.That(items, Is.EqualTo(new[] { 1, 2, 3, 4 }));
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ToSinkAsync_With_Delegate_Awaits_Backpressure_Style_Writes()
+    {
+        var stream = Stream.Range(1, 3);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writesStarted = 0;
+        var writeTask = stream.ToSinkAsync(async (item, _) =>
+        {
+            writesStarted++;
+            if (item == 1)
+            {
+                await gate.Task;
+            }
+        });
+
+        await Task.Delay(100);
+
+        Assert.That(writesStarted, Is.EqualTo(1));
+
+        gate.SetResult();
+        await writeTask;
+
+        Assert.That(writesStarted, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void ToSinkAsync_With_Delegate_Propagates_Write_Callback_Exception()
+    {
+        var failure = new InvalidOperationException("write");
+        var stream = Stream.Range(1, 3);
+        var completionError = default(Exception?);
+        var completionCount = 0;
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToSinkAsync(
+            (item, _) =>
+            {
+                if (item == 2)
+                {
+                    throw failure;
+                }
+
+                return ValueTask.CompletedTask;
+            },
+            completeAsync: (error, _) =>
+            {
+                completionCount++;
+                completionError = error;
+                return ValueTask.CompletedTask;
+            }));
+
+        Assert.That(exception, Is.SameAs(failure));
+        Assert.That(completionCount, Is.EqualTo(1));
+        Assert.That(completionError, Is.SameAs(failure));
+    }
+
+    [Test]
+    public async Task ToSinkAsync_With_Delegate_LeaveSinkOpen_Skips_Completion_Callback()
+    {
+        var stream = Stream.Range(1, 2);
+        var items = new List<int>();
+        var completionCount = 0;
+
+        await stream.ToSinkAsync(
+            (item, _) =>
+            {
+                items.Add(item);
+                return ValueTask.CompletedTask;
+            },
+            completeAsync: (_, _) =>
+            {
+                completionCount++;
+                return ValueTask.CompletedTask;
+            },
+            completionMode: SinkCompletionMode.LeaveSinkOpen);
+
+        Assert.That(items, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(completionCount, Is.EqualTo(0));
+    }
 
     [Test]
     public async Task ToChannel_Works()

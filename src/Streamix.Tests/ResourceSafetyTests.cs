@@ -378,6 +378,41 @@ public class ResourceSafetyTests
     }
 
     [Test]
+    public void Using_DisposalException_ReplacesUpstreamException()
+    {
+        var resource = new MockResource { ThrowOnDispose = true };
+        var stream = Stream.Using(() => resource, r => Stream.Error<int>(new Exception("Upstream failure")));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        Assert.That(exception!.Message, Is.EqualTo("Dispose failure"));
+    }
+
+    [Test]
+    public void Using_DisposesResource_WhenStreamFactoryThrows()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using<MockResource, int>(() => resource, _ => throw new InvalidOperationException("Factory failure"));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        Assert.That(exception!.Message, Is.EqualTo("Factory failure"));
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Using_IAsyncDisposable_DisposesResource_WhenStreamFactoryThrows()
+    {
+        var resource = new MockResource();
+        var stream = Stream.Using<MockResource, int>(ct => ValueTask.FromResult(resource), _ => throw new InvalidOperationException("Factory failure"));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        Assert.That(exception!.Message, Is.EqualTo("Factory failure"));
+        Assert.That(resource.DisposeCount, Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task Using_CreatesFreshResourcePerSubscription()
     {
         var createCount = 0;

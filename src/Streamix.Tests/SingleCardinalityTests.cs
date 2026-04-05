@@ -1,8 +1,4 @@
 using NUnit.Framework;
-using Streamix;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Streamix.Tests;
 
@@ -87,7 +83,7 @@ public class SingleCardinalityTests
         ISingle<int> single = Single.From(Source()).Retry(1);
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-             await foreach (var item in single) { }
+            await foreach (var item in single) { }
         });
     }
 }

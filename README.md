@@ -139,18 +139,28 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `RunOn`
 * `DoOnNext`, `Do`, `Tap`, `DoOnError`, `DoOnComplete`, `DoOnTerminate`
 
-`IStream<T>` includes `ForEachAsync(...)` and channel output. Additional terminal operators are available through extension methods:
+`IStream<T>` includes `ForEachAsync(...)`, sink output, and channel output. Additional terminal operators are available through extension methods:
 
 * `ToListAsync`, `ToArrayAsync`, `ToHashSetAsync`, `ToDictionaryAsync`, `ToLookupAsync`
 * `FirstAsync` / `LastAsync` (and `OrDefault` variants)
+* `ElementAtAsync` / `ElementAtOrDefaultAsync`
 * `ContainsAsync`
 * `SingleAsync` (and `OrDefault` variant)
 * `AggregateAsync` / `CountAsync` / `AnyAsync` / `AllAsync`
 * `MinAsync` / `MaxAsync`
 * `MinByAsync` / `MaxByAsync` (with comparer overloads)
 * `SumAsync` / `AverageAsync`
+* `DrainAsync` / d`ToSinkAsync`
 
 `ISingle<T>` also supports `ToTask()`.
+
+### Boundary Semantics
+
+* `ToDictionaryAsync(...)` follows .NET `Dictionary` semantics and throws on duplicate keys.
+* `ToLookupAsync(...)` materializes grouped output and supports comparer overloads for key handling.
+* `ContainsAsync(...)` short-circuits as soon as a matching value is found.
+* `MinByAsync(...)` and `MaxByAsync(...)` support comparer overloads when default key ordering is not the desired ordering.
+* `DrainAsync(...)` is the explicit completion-only terminal when you care about completion, cancellation, or failure but not emitted items.
 
 ---
 
@@ -204,6 +214,41 @@ IStream<int> fromChannel = Stream.FromChannel(channel);
 await Stream.Range(1, 3).ToChannel(channel.Writer, completeWriter: true);
 ```
 
+### Sinks
+
+Streamix also exposes a small reusable sink abstraction for boundary writes:
+
+```csharp
+var output = new List<int>();
+
+await Stream.Range(1, 3).ToSinkAsync(
+    (item, ct) =>
+    {
+        output.Add(item);
+        return ValueTask.CompletedTask;
+    });
+```
+
+The core contract is:
+
+```csharp
+public interface IAsyncSink<in T>
+{
+    ValueTask WriteAsync(T item, CancellationToken cancellationToken = default);
+    ValueTask CompleteAsync(Exception? error = null, CancellationToken cancellationToken = default);
+}
+```
+
+Use `SinkCompletionMode.CompleteSink` to let the terminal own sink completion, or `SinkCompletionMode.LeaveSinkOpen` when the caller owns the destination lifetime.
+
+Sink completion semantics are explicit:
+
+* on successful completion, `CompleteAsync(null)` is called when completion is owned by the terminal
+* on upstream or sink write failure, `CompleteAsync(error)` is called and the original exception is still propagated to the caller
+* on cancellation, Streamix stops writing and does not complete the sink
+
+`ToChannel(...)` is implemented as an adapter over the same sink path, so channel writes and custom sinks follow the same completion and error rules.
+
 ---
 
 ## 🏗️ Creation Operators
@@ -224,6 +269,19 @@ var stream = Stream.Create<int>(async emitter => {
 ```
 *   **Backpressure**: `EmitAsync` awaits if the downstream consumer is slow.
 *   **Cancellation**: Check `emitter.CancellationToken` to stop producing. `EmitAsync` will throw an `OperationCanceledException` if the subscriber cancels or if the stream has already reached a terminal state (`Complete` or `Fail`).
+
+### `Stream.FromEvent<T>`
+For async callback or event sources that can await item delivery and return an `IDisposable` subscription.
+```csharp
+var source = new PriceFeed();
+
+var prices = Stream.FromEvent<decimal>(handler => source.Subscribe(handler));
+
+var latest = await prices.Take(2).ToListAsync();
+```
+*   **Shape**: `FromEvent(...)` is intentionally narrow in the first pass. It expects a subscription function that accepts an async handler (`Func<T, ValueTask>`) and returns an `IDisposable` used for teardown.
+*   **Backpressure**: When the source awaits the handler, `FromEvent(...)` preserves the same backpressure contract as `Create(...)`.
+*   **Lifetime**: Each subscriber gets its own registration. Cancelling or disposing the subscription always disposes the returned registration.
 
 ### `Stream.Defer<T>` / `Single.Defer<T>`
 Lazy creation: the factory is called once per subscriber.

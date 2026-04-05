@@ -1374,37 +1374,13 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
-    public async Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
+    public Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
     {
-        IAsyncEnumerator<T>? enumerator = null;
-        try
-        {
-            enumerator = this.GetAsyncEnumerator(cancellationToken);
-            while (await enumerator.MoveNextAsync())
-            {
-                await writer.WriteAsync(enumerator.Current, cancellationToken);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (completeWriter)
-            {
-                writer.TryComplete(ex);
-            }
-            throw;
-        }
-        finally
-        {
-            if (enumerator != null)
-            {
-                await enumerator.DisposeAsync();
-            }
-
-            if (completeWriter)
-            {
-                writer.TryComplete();
-            }
-        }
+        return TerminalExtensions.ToSinkAsync(
+            this,
+            new ChannelWriterSink<T>(writer),
+            completeWriter ? SinkCompletionMode.CompleteSink : SinkCompletionMode.LeaveSinkOpen,
+            cancellationToken);
     }
 }
 

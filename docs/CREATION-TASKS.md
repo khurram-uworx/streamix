@@ -6,6 +6,10 @@ This document breaks the remaining creation-operator roadmap from `docs/CREATION
 
 The current release-targeted slice appears complete enough to move toward release planning. These tasks focus on the remaining phase 2 and phase 3 work rather than release-blocking fixes.
 
+## Current Status
+
+All six tasks in this document are now complete in the repository.
+
 ## Suggested Execution Order
 
 1. Task 1: Add collection and lazy-enumerable stream factories
@@ -150,7 +154,7 @@ The plan identifies `Never<T>()`, `Timer(TimeSpan)`, and possibly `Poll(...)` as
 - `src/Streamix.Tests/TimeBasedOperatorTests.cs`
 - `README.md`
 
-## Task 4: Add Resource-Scoped Creation With `Using(...)`
+## ✅ Task 4: Add Resource-Scoped Creation With `Using(...)`
 
 ### Priority
 
@@ -195,7 +199,7 @@ Confirm the initial surface:
 - `src/Streamix.Tests/ResourceSafetyTests.cs`
 - `README.md`
 
-## Task 5: Add Event Or Callback Helper(s) On Top Of `Create(...)`
+## ✅ Task 5: Add Event Or Callback Helper(s) On Top Of `Create(...)`
 
 ### Priority
 
@@ -241,7 +245,7 @@ The plan explicitly recommends building boundary-specialized helpers on top of `
 - `src/Streamix.Tests/CreateTests.cs`
 - `README.md`
 
-## Task 6: Expand README And Example Coverage For The Next Creation Slice
+## ✅ Task 6: Expand README And Example Coverage For The Next Creation Slice
 
 ### Priority
 

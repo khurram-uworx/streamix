@@ -1,6 +1,4 @@
 using NUnit.Framework;
-using Streamix;
-using Streamix.Implementations;
 
 namespace Streamix.Tests;
 
@@ -23,7 +21,8 @@ public class TimeAwareTerminalTests
     {
         var clock = new TestClock();
         // A stream that never emits
-        var stream = Stream.Create<int>(async emitter => {
+        var stream = Stream.Create<int>(async emitter =>
+        {
             await clock.Delay(TimeSpan.FromSeconds(10), emitter.CancellationToken);
         });
         // We need to use Stream.From(..., clock) to ensure it uses our TestClock
@@ -41,7 +40,8 @@ public class TimeAwareTerminalTests
     public async Task FirstOrDefaultAsync_With_Timeout_Returns_Default_On_Timeout()
     {
         var clock = new TestClock();
-        var stream = Stream.Create<int>(async emitter => {
+        var stream = Stream.Create<int>(async emitter =>
+        {
             await clock.Delay(TimeSpan.FromSeconds(10), emitter.CancellationToken);
         });
         var streamWithClock = Stream.From(stream, clock);
@@ -60,7 +60,8 @@ public class TimeAwareTerminalTests
     {
         var clock = new TestClock();
 
-        var stream = Stream.Create<long>(async emitter => {
+        var stream = Stream.Create<long>(async emitter =>
+        {
             await clock.Delay(TimeSpan.FromSeconds(1), emitter.CancellationToken);
             await emitter.EmitAsync(0);
             await clock.Delay(TimeSpan.FromSeconds(1), emitter.CancellationToken);

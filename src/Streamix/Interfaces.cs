@@ -53,6 +53,29 @@ public interface IStreamEmitter<T>
 }
 
 /// <summary>
+/// Represents an asynchronous destination for stream items.
+/// </summary>
+/// <typeparam name="T">The type of items written to the sink.</typeparam>
+public interface IAsyncSink<in T>
+{
+    /// <summary>
+    /// Writes a single item to the sink.
+    /// </summary>
+    /// <param name="item">The item to write.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when the write has finished.</returns>
+    ValueTask WriteAsync(T item, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Completes the sink, optionally passing through an upstream failure.
+    /// </summary>
+    /// <param name="error">The upstream failure, or <see langword="null"/> on successful completion.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when sink completion has finished.</returns>
+    ValueTask CompleteAsync(Exception? error = null, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Represents a stream that can be connected to a shared source.
 /// </summary>
 /// <typeparam name="T">The type of items in the stream.</typeparam>

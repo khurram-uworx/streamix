@@ -5,6 +5,86 @@ namespace Streamix.Tests;
 [TestFixture]
 public class CreateTests
 {
+    sealed class AsyncEventSource<T>
+    {
+        sealed class Subscription : IDisposable
+        {
+            readonly AsyncEventSource<T> owner;
+            readonly Func<T, ValueTask> handler;
+            int disposed;
+
+            public Subscription(AsyncEventSource<T> owner, Func<T, ValueTask> handler)
+            {
+                this.owner = owner;
+                this.handler = handler;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref disposed, 1) == 0)
+                {
+                    owner.Unsubscribe(handler);
+                }
+            }
+        }
+
+        readonly object gate = new();
+        readonly List<Func<T, ValueTask>> handlers = new();
+
+        public int SubscribeCount { get; private set; }
+
+        public int UnsubscribeCount { get; private set; }
+
+        public IDisposable Subscribe(Func<T, ValueTask> handler)
+        {
+            lock (gate)
+            {
+                handlers.Add(handler);
+                SubscribeCount++;
+            }
+
+            return new Subscription(this, handler);
+        }
+
+        public async ValueTask PublishAsync(T item)
+        {
+            Func<T, ValueTask>[] snapshot;
+            lock (gate)
+            {
+                snapshot = handlers.ToArray();
+            }
+
+            foreach (var handler in snapshot)
+            {
+                await handler(item);
+            }
+        }
+
+        void Unsubscribe(Func<T, ValueTask> handler)
+        {
+            lock (gate)
+            {
+                handlers.Remove(handler);
+                UnsubscribeCount++;
+            }
+        }
+    }
+
+    static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        Assert.Fail("Condition was not met in time.");
+    }
+
     [Test]
     public async Task Create_Emits_Items_And_Completes()
     {
@@ -252,5 +332,96 @@ public class CreateTests
 
         await producerFinished.Task;
         Assert.That(producerLoopCount, Is.LessThan(10)); // Should have stopped early
+    }
+
+    [Test]
+    public async Task FromEvent_Emits_Items_And_Tears_Down_After_Take_Completes()
+    {
+        var source = new AsyncEventSource<int>();
+        var stream = Stream.FromEvent<int>(source.Subscribe);
+
+        var subscriberTask = TestSubscriber<int>.SubscribeAsync(stream.Take(2));
+        await WaitUntilAsync(() => source.SubscribeCount == 1);
+
+        await source.PublishAsync(1);
+        await source.PublishAsync(2);
+
+        (await subscriberTask)
+            .AssertValues(1, 2)
+            .AssertComplete();
+
+        await WaitUntilAsync(() => source.UnsubscribeCount == 1);
+    }
+
+    [Test]
+    public async Task FromEvent_Unsubscribes_On_Cancellation()
+    {
+        var source = new AsyncEventSource<int>();
+        var stream = Stream.FromEvent<int>(source.Subscribe);
+        using var cts = new CancellationTokenSource();
+
+        var subscriberTask = TestSubscriber<int>.SubscribeAsync(stream, cts.Token);
+        await WaitUntilAsync(() => source.SubscribeCount == 1);
+
+        await cts.CancelAsync();
+
+        (await subscriberTask)
+            .AssertValueCount(0)
+            .AssertNotComplete();
+
+        await WaitUntilAsync(() => source.UnsubscribeCount == 1);
+    }
+
+    [Test]
+    public async Task FromEvent_Creates_Fresh_Subscription_Per_Subscriber()
+    {
+        var source = new AsyncEventSource<int>();
+        var stream = Stream.FromEvent<int>(source.Subscribe);
+
+        var firstTask = TestSubscriber<int>.SubscribeAsync(stream.Take(1));
+        await WaitUntilAsync(() => source.SubscribeCount == 1);
+        await source.PublishAsync(1);
+        (await firstTask)
+            .AssertValues(1)
+            .AssertComplete();
+        await WaitUntilAsync(() => source.UnsubscribeCount == 1);
+
+        var secondTask = TestSubscriber<int>.SubscribeAsync(stream.Take(1));
+        await WaitUntilAsync(() => source.SubscribeCount == 2);
+        await source.PublishAsync(2);
+        (await secondTask)
+            .AssertValues(2)
+            .AssertComplete();
+        await WaitUntilAsync(() => source.UnsubscribeCount == 2);
+    }
+
+    [Test]
+    public async Task FromEvent_Preserves_Backpressure_When_Source_Awaits_Handler()
+    {
+        var source = new AsyncEventSource<int>();
+        var stream = Stream.FromEvent<int>(source.Subscribe);
+
+        await using var enumerator = stream.GetAsyncEnumerator();
+
+        var firstMoveNext = enumerator.MoveNextAsync().AsTask();
+        await WaitUntilAsync(() => source.SubscribeCount == 1);
+
+        await source.PublishAsync(1);
+        Assert.That(await firstMoveNext, Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(1));
+
+        await source.PublishAsync(2);
+
+        var blockedPublish = source.PublishAsync(3).AsTask();
+        await Task.Delay(50);
+        Assert.That(blockedPublish.IsCompleted, Is.False);
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(2));
+
+        await blockedPublish;
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(3));
     }
 }

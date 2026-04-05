@@ -1347,28 +1347,13 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
-    public async Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
+    public Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await foreach (var item in this.WithCancellation(cancellationToken))
-            {
-                await writer.WriteAsync(item, cancellationToken);
-            }
-
-            if (completeWriter)
-            {
-                writer.TryComplete();
-            }
-        }
-        catch (Exception ex)
-        {
-            if (completeWriter)
-            {
-                writer.TryComplete(ex);
-            }
-            throw;
-        }
+        return TerminalExtensions.ToSinkAsync(
+            this,
+            new ChannelWriterSink<T>(writer),
+            completeWriter ? SinkCompletionMode.CompleteSink : SinkCompletionMode.LeaveSinkOpen,
+            cancellationToken);
     }
 }
 

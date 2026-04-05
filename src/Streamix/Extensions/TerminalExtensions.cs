@@ -1,9 +1,26 @@
 using Streamix.Implementations;
 using System.Collections.ObjectModel;
-using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 
 namespace Streamix;
+
+/// <summary>
+/// Controls whether a sink terminal owns sink completion.
+/// </summary>
+public enum SinkCompletionMode
+{
+    /// <summary>
+    /// Complete the sink when the stream finishes successfully or fails.
+    /// Cancellation does not complete the sink.
+    /// </summary>
+    CompleteSink,
+
+    /// <summary>
+    /// Leave the sink open after the stream stops writing.
+    /// </summary>
+    LeaveSinkOpen
+}
 
 /// <summary>
 /// Provides static extension methods for <see cref="IStream{T}"/> to offer Sink / Terminal variety.
@@ -1420,6 +1437,75 @@ public static class TerminalExtensions
     }
 
     // Bridging Terminals
+
+    /// <summary>
+    /// Terminal operation that writes all items of the stream to the specified <see cref="IAsyncSink{T}"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="sink">The destination sink.</param>
+    /// <param name="completionMode">Controls whether the sink is completed by this terminal.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when all items have been written to the sink.</returns>
+    public static async Task ToSinkAsync<T>(this IStream<T> stream, IAsyncSink<T> sink, SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink, CancellationToken cancellationToken = default)
+    {
+        Exception? completionError = null;
+        ExceptionDispatchInfo? capturedException = null;
+        var shouldCompleteSink = completionMode == SinkCompletionMode.CompleteSink;
+        var canceled = false;
+
+        try
+        {
+            await foreach (var item in stream.WithCancellation(cancellationToken))
+            {
+                await sink.WriteAsync(item, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            canceled = true;
+            capturedException = ExceptionDispatchInfo.Capture(ex);
+        }
+        catch (Exception ex)
+        {
+            completionError = ex;
+            capturedException = ExceptionDispatchInfo.Capture(ex);
+        }
+
+        if (shouldCompleteSink && !canceled)
+        {
+            try
+            {
+                await sink.CompleteAsync(completionError, cancellationToken);
+            }
+            catch when (capturedException is not null)
+            {
+                // Preserve the original upstream or write failure when completion also fails.
+            }
+        }
+
+        capturedException?.Throw();
+    }
+
+    /// <summary>
+    /// Terminal operation that writes all items of the stream to a delegate-backed sink.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="writeAsync">The asynchronous callback invoked for each item.</param>
+    /// <param name="completeAsync">An optional asynchronous callback invoked when sink completion is owned by this terminal.</param>
+    /// <param name="completionMode">Controls whether the sink is completed by this terminal.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when all items have been written to the sink.</returns>
+    public static Task ToSinkAsync<T>(
+        this IStream<T> stream,
+        Func<T, CancellationToken, ValueTask> writeAsync,
+        Func<Exception?, CancellationToken, ValueTask>? completeAsync = null,
+        SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink,
+        CancellationToken cancellationToken = default)
+    {
+        return stream.ToSinkAsync(new DelegateAsyncSink<T>(writeAsync, completeAsync), completionMode, cancellationToken);
+    }
 
     /// <summary>
     /// Terminal operation that writes all items of the stream to a new <see cref="ChannelReader{T}"/>.

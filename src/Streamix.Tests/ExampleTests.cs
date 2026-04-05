@@ -6,6 +6,65 @@ namespace Streamix.Tests;
 [TestFixture]
 public class ExampleTests
 {
+    sealed class AsyncEventSource<T>
+    {
+        sealed class Subscription : IDisposable
+        {
+            readonly AsyncEventSource<T> owner;
+            readonly Func<T, ValueTask> handler;
+            int disposed;
+
+            public Subscription(AsyncEventSource<T> owner, Func<T, ValueTask> handler)
+            {
+                this.owner = owner;
+                this.handler = handler;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref disposed, 1) == 0)
+                {
+                    owner.Unsubscribe(handler);
+                }
+            }
+        }
+
+        readonly object gate = new();
+        readonly List<Func<T, ValueTask>> handlers = new();
+
+        public IDisposable Subscribe(Func<T, ValueTask> handler)
+        {
+            lock (gate)
+            {
+                handlers.Add(handler);
+            }
+
+            return new Subscription(this, handler);
+        }
+
+        public async ValueTask PublishAsync(T item)
+        {
+            Func<T, ValueTask>[] snapshot;
+            lock (gate)
+            {
+                snapshot = handlers.ToArray();
+            }
+
+            foreach (var handler in snapshot)
+            {
+                await handler(item);
+            }
+        }
+
+        void Unsubscribe(Func<T, ValueTask> handler)
+        {
+            lock (gate)
+            {
+                handlers.Remove(handler);
+            }
+        }
+    }
+
     public record User(int Id, string Name);
     public record Order(int Id, int UserId, string Product);
 
@@ -107,6 +166,21 @@ public class ExampleTests
     }
 
     [Test]
+    public async Task Readme_Sinks_Works()
+    {
+        var output = new List<int>();
+
+        await Stream.Range(1, 3).ToSinkAsync(
+            (item, _) =>
+            {
+                output.Add(item);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.That(output, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
     public async Task Readme_Execution_Works()
     {
         var stream = Stream.Range(1, 3);
@@ -130,5 +204,21 @@ public class ExampleTests
         var output = new List<int>();
         await recovered.ForEachAsync(output.Add);
         Assert.That(output, Is.EqualTo(new[] { 1 }));
+    }
+
+    [Test]
+    public async Task Readme_FromEvent_Works()
+    {
+        var source = new AsyncEventSource<int>();
+
+        var subscriptionTask = Stream.FromEvent<int>(source.Subscribe)
+            .Take(2)
+            .ToListAsync();
+
+        await source.PublishAsync(10);
+        await source.PublishAsync(20);
+
+        var result = await subscriptionTask;
+        Assert.That(result, Is.EqualTo(new[] { 10, 20 }));
     }
 }

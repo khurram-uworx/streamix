@@ -230,6 +230,26 @@ public class StreamTests
     }
 
     [Test]
+    public async Task ToChannel_Completes_Writer_With_Upstream_Error()
+    {
+        async IAsyncEnumerable<int> Source()
+        {
+            yield return 1;
+            throw new InvalidOperationException("Stream Error");
+        }
+
+        var channel = Channel.CreateUnbounded<int>();
+        var stream = Stream.From(Source());
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.ToChannel(channel.Writer));
+
+        Assert.That(exception?.Message, Is.EqualTo("Stream Error"));
+        Assert.That(await channel.Reader.ReadAsync(), Is.EqualTo(1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await channel.Reader.Completion);
+    }
+
+    [Test]
     public async Task ToChannel_Does_Not_Complete_Writer_If_Requested()
     {
         var channel = Channel.CreateUnbounded<int>();
@@ -252,7 +272,8 @@ public class StreamTests
         var cts = new CancellationTokenSource();
         var channel = Channel.CreateUnbounded<int>();
 
-        var stream = Stream.Range(1, 100).DoOnNext(x => {
+        var stream = Stream.Range(1, 100).DoOnNext(x =>
+        {
             if (x == 5) cts.Cancel();
         });
 

@@ -469,6 +469,31 @@ public static class Stream
     public static IStream<T> Create<T>(Func<IStreamEmitter<T>, CancellationToken, ValueTask> producer) => Stream<T>.Create(producer);
 
     /// <summary>
+    /// Creates a stream from an async callback or event source that can await item delivery and returns an <see cref="IDisposable"/> subscription.
+    /// Each subscriber creates its own registration, and disposing or cancelling the subscription tears that registration down.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="subscribe">Registers an async handler and returns a disposable that unregisters it.</param>
+    /// <returns>A stream that forwards items from the callback or event source.</returns>
+    public static IStream<T> FromEvent<T>(Func<Func<T, ValueTask>, IDisposable> subscribe)
+    {
+        ArgumentNullException.ThrowIfNull(subscribe);
+
+        return Create<T>(async (emitter, cancellationToken) =>
+        {
+            using var subscription = subscribe(item => emitter.EmitAsync(item));
+
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+        });
+    }
+
+    /// <summary>
     /// Creates a stream by statefully generating elements.
     /// </summary>
     /// <typeparam name="TState">The type of the state.</typeparam>
