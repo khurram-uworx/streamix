@@ -36,17 +36,20 @@ public interface IStreamEmitter<T>
     /// </summary>
     /// <param name="item">The item to emit.</param>
     /// <returns>A value task that completes when the item has been accepted into the buffer.</returns>
+    /// <exception cref="OperationCanceledException">Thrown if the stream has reached a terminal state via <see cref="Complete"/> or <see cref="Fail"/>, or if the subscriber has cancelled the subscription.</exception>
     ValueTask EmitAsync(T item);
 
     /// <summary>
     /// Signals successful completion of the stream.
-    /// Any subsequent calls to <see cref="EmitAsync"/>, <see cref="Complete"/>, or <see cref="Fail"/> will be ignored.
+    /// Any subsequent calls to <see cref="Complete"/> or <see cref="Fail"/> will be ignored.
+    /// Subsequent calls to <see cref="EmitAsync"/> will throw <see cref="OperationCanceledException"/>.
     /// </summary>
     void Complete();
 
     /// <summary>
     /// Signals a failure to the stream.
-    /// Any subsequent calls to <see cref="EmitAsync"/>, <see cref="Complete"/>, or <see cref="Fail"/> will be ignored.
+    /// Any subsequent calls to <see cref="Complete"/> or <see cref="Fail"/> will be ignored.
+    /// Subsequent calls to <see cref="EmitAsync"/> will throw <see cref="OperationCanceledException"/>.
     /// </summary>
     /// <param name="error">The exception that caused the failure.</param>
     void Fail(Exception error);

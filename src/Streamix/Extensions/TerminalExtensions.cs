@@ -1,6 +1,5 @@
 using Streamix.Implementations;
 using System.Collections.ObjectModel;
-using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 
 namespace Streamix;
@@ -31,7 +30,7 @@ public static class TerminalExtensions
     {
         if (stream is Stream<T> s) return s.Clock;
         if (stream is ConnectableStream<T> cs) return cs.Clock;
-        return Streamix.Concurrency.SystemClock.Instance;
+        return SystemClock.Instance;
     }
 
     /// <summary>
@@ -480,6 +479,25 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Returns the count of items in the stream that satisfy an asynchronous condition.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">An asynchronous function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns the count of items that satisfy the condition.</returns>
+    public static async Task<int> CountAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        int count = 0;
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (await predicate(item))
+                count++;
+        }
+        return count;
+    }
+
+    /// <summary>
     /// Determines whether any item in the stream satisfies a condition.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -498,6 +516,24 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Determines whether any item in the stream satisfies an asynchronous condition.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">An asynchronous function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns true if any item satisfies the condition; otherwise, false.</returns>
+    public static async Task<bool> AnyAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (await predicate(item))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Determines whether all items in the stream satisfy a condition.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -510,6 +546,24 @@ public static class TerminalExtensions
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             if (!predicate(item))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Determines whether all items in the stream satisfy an asynchronous condition.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="predicate">An asynchronous function to test each item for a condition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that returns true if all items satisfy the condition; otherwise, false.</returns>
+    public static async Task<bool> AllAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            if (!await predicate(item))
                 return false;
         }
         return true;
@@ -1447,44 +1501,9 @@ public static class TerminalExtensions
     /// <param name="completionMode">Controls whether the sink is completed by this terminal.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all items have been written to the sink.</returns>
-    public static async Task ToSinkAsync<T>(this IStream<T> stream, IAsyncSink<T> sink, SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink, CancellationToken cancellationToken = default)
+    public static Task ToSinkAsync<T>(this IStream<T> stream, IAsyncSink<T> sink, SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink, CancellationToken cancellationToken = default)
     {
-        Exception? completionError = null;
-        ExceptionDispatchInfo? capturedException = null;
-        var shouldCompleteSink = completionMode == SinkCompletionMode.CompleteSink;
-        var canceled = false;
-
-        try
-        {
-            await foreach (var item in stream.WithCancellation(cancellationToken))
-            {
-                await sink.WriteAsync(item, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
-        {
-            canceled = true;
-            capturedException = ExceptionDispatchInfo.Capture(ex);
-        }
-        catch (Exception ex)
-        {
-            completionError = ex;
-            capturedException = ExceptionDispatchInfo.Capture(ex);
-        }
-
-        if (shouldCompleteSink && !canceled)
-        {
-            try
-            {
-                await sink.CompleteAsync(completionError, cancellationToken);
-            }
-            catch when (capturedException is not null)
-            {
-                // Preserve the original upstream or write failure when completion also fails.
-            }
-        }
-
-        capturedException?.Throw();
+        return Implementations.SinkHelper.WriteSinkAsync(stream, sink, completionMode, cancellationToken);
     }
 
     /// <summary>

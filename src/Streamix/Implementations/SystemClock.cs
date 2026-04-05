@@ -1,4 +1,4 @@
-namespace Streamix.Concurrency;
+namespace Streamix.Implementations;
 
 /// <summary>
 /// A default implementation of <see cref="IClock"/> using system time.

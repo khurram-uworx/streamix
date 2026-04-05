@@ -42,7 +42,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
         if (bufferSize < 0) throw new ArgumentOutOfRangeException(nameof(bufferSize), "Buffer size must be non-negative.");
         this.source = source;
         this.replayBufferSize = bufferSize;
-        this.clock = clock ?? (source is Stream<T> s ? s.Clock : Streamix.Concurrency.SystemClock.Instance);
+        this.clock = clock ?? (source is Stream<T> s ? s.Clock : Streamix.Implementations.SystemClock.Instance);
     }
 
     internal IClock Clock => clock;
@@ -1349,7 +1349,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
     {
-        return TerminalExtensions.ToSinkAsync(
+        return SinkHelper.WriteSinkAsync(
             this,
             new ChannelWriterSink<T>(writer),
             completeWriter ? SinkCompletionMode.CompleteSink : SinkCompletionMode.LeaveSinkOpen,

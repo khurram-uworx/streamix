@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Streamix.Tests;
+namespace Streamix.Tests.Extensions;
 
 [TestFixture]
 public class TerminalExtensionsTests
@@ -970,5 +970,92 @@ public class TerminalExtensionsTests
     {
         var stream = Stream.Error<int>(new InvalidOperationException("upstream"));
         Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToLookupAsync(x => x));
+    }
+
+    // Async Predicate Terminal Tests
+
+    [Test]
+    public async Task CountAsync_With_AsyncPredicate_Works()
+    {
+        var stream = Stream.Range(1, 5);
+
+        var count = await stream.CountAsync(async x =>
+        {
+            await Task.Yield();
+            return x % 2 == 0;
+        });
+
+        Assert.That(count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task AnyAsync_With_AsyncPredicate_ShortCircuits_On_First_Match()
+    {
+        var stream = Stream.Range(1, 5);
+        var predicateCalls = 0;
+
+        var result = await stream.AnyAsync(async x =>
+        {
+            predicateCalls++;
+            await Task.Yield();
+            return x == 3;
+        });
+
+        Assert.That(result, Is.True);
+        Assert.That(predicateCalls, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task AllAsync_With_AsyncPredicate_ShortCircuits_On_First_Failure()
+    {
+        var stream = Stream.Range(1, 5);
+        var predicateCalls = 0;
+
+        var result = await stream.AllAsync(async x =>
+        {
+            predicateCalls++;
+            await Task.Yield();
+            return x < 3;
+        });
+
+        Assert.That(result, Is.False);
+        Assert.That(predicateCalls, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void CountAsync_With_AsyncPredicate_Respects_Cancellation()
+    {
+        var stream = Stream.Never<int>();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.CatchAsync<OperationCanceledException>(async () =>
+            await stream.CountAsync(_ => ValueTask.FromResult(true), cts.Token));
+    }
+
+    [Test]
+    public void AnyAsync_With_AsyncPredicate_Propagates_Upstream_Exception()
+    {
+        var stream = Stream.Error<int>(new InvalidOperationException("upstream"));
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.AnyAsync(_ => ValueTask.FromResult(true)));
+    }
+
+    [Test]
+    public void AllAsync_With_AsyncPredicate_Propagates_Predicate_Exception()
+    {
+        var stream = Stream.Range(1, 5);
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await stream.AllAsync<int>(x =>
+            {
+                if (x == 3)
+                {
+                    return ValueTask.FromException<bool>(new InvalidOperationException("predicate"));
+                }
+
+                return ValueTask.FromResult(true);
+            }));
     }
 }

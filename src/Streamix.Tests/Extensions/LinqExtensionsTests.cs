@@ -1,10 +1,10 @@
 using NUnit.Framework;
 using Streamix;
 
-namespace Streamix.Tests;
+namespace Streamix.Tests.Extensions;
 
 [TestFixture]
-public class LinqTests
+public class LinqExtensionsTests
 {
     [Test]
     public async Task Where_Filters_Elements()

@@ -1,4 +1,3 @@
-using Streamix.Concurrency;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -1376,7 +1375,7 @@ public sealed class Stream<T> : IStream<T>
     /// <inheritdoc />
     public Task ToChannel(ChannelWriter<T> writer, bool completeWriter = true, CancellationToken cancellationToken = default)
     {
-        return TerminalExtensions.ToSinkAsync(
+        return SinkHelper.WriteSinkAsync(
             this,
             new ChannelWriterSink<T>(writer),
             completeWriter ? SinkCompletionMode.CompleteSink : SinkCompletionMode.LeaveSinkOpen,

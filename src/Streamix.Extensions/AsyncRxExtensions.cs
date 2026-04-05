@@ -7,7 +7,7 @@ namespace Streamix.Extensions;
 /// <summary>
 /// Provides extension methods for interoperability between Streamix and AsyncRx.NET.
 /// </summary>
-public static class AsyncRxInteropExtensions
+public static class AsyncRxExtensions
 {
     static async IAsyncEnumerable<T> toAsyncEnumerable<T>(IAsyncObservable<T> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
