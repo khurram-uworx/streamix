@@ -1,79 +1,62 @@
-# Streamix Concurrency Control: Explicit Semantics for Ordered/Unordered Operations
+# Streamix Concurrency Contract for 0.6
 
 ## Overview
 
-Currently, Streamix provides concurrency control through scattered operators with inconsistent naming:
-- `ParallelMap` / `ParallelMapOrdered` (1→1 transforms)
-- `FlatMap` / `FlatMapMany` (1→N transforms)
+This document records the settled 0.6 concurrency contract for Streamix. It is no longer a design proposal.
 
-The **ordering semantics are implicit and naming is inconsistent**. Users can't easily discover or understand whether results are:
+The key rule is that Streamix currently expresses `Map` concurrency by overload shape, not by operator name alone. That is an intentional 0.6 product decision and should not be reopened during follow-up docs work.
 
-- **Unordered** (fastest, results emit as soon as they complete)
-- **Sequential** (ordered, but single-threaded with no concurrency)
-- **Ordered concurrent** (concurrent execution with order-preserving output)
+## Settled `Map` Contract
 
-This ambiguity creates a **production concern**: developers must guess which semantic applies, potentially missing performance optimizations or ending up with unexpected result ordering.
-
-## Proposal: Unified Concurrency API (Option C)
-
-We will introduce a **unified, symmetric API** that makes the concurrency contract clear and discoverable:
+For 0.6, the shipped `Map` surface is:
 
 ```csharp
-// Single-value transforms (1→1)
-stream.Map(selector)                                    // unordered, unbounded
-stream.MapOrdered(selector, maxConcurrency: 10)       // ordered, configurable concurrency
-
-// Multi-value transforms (1→N flattening)
-stream.FlatMap(selector)                               // unordered, unbounded
-stream.FlatMapOrdered(selector, maxConcurrency: 10)   // ordered, configurable concurrency
-
-// Sequential (single-threaded, always ordered)
-stream.ConcatMap(selector)                            // sequential, strict order
+stream.Map(Func<T, TResult>)                              // sequential, ordered
+stream.MapAwait(Func<T, ValueTask<TResult>>)             // sequential, ordered
+stream.Map(Func<T, Task<TResult>>, maxConcurrency: N)    // concurrent, unordered
+stream.MapOrdered(Func<T, Task<TResult>>, maxConcurrency: N) // concurrent, ordered
 ```
 
-### Semantic Comparison
+### Semantics Table
 
-| Operator | Concurrency | Ordering | Use Case | Performance |
-|----------|-------------|----------|----------|-------------|
-| `Map()` | Unbounded | Unordered | Fire-and-forget, fastest transformation | ⭐⭐⭐ |
-| `MapOrdered()` | Configurable N | Ordered (reordered) | Transform with order preservation | ⭐⭐ |
-| `FlatMap()` | Unbounded | Unordered | Fire-and-forget, fastest pipeline | ⭐⭐⭐ |
-| `FlatMapOrdered()` | Configurable N | Ordered (reordered) | Flatten with order preservation | ⭐⭐ |
-| `ConcatMap()` | 1 | Ordered (sequential) | Strict ordering, side effects that need order | ⭐ |
+| Operator shape | Concurrency | Ordering | Notes |
+|----------|-------------|----------|----------|
+| `Map(Func<T, TResult>)` | 1 | Ordered | Synchronous projection over the source stream |
+| `MapAwait(Func<T, ValueTask<TResult>>)` | 1 | Ordered | Async projection, but each item is awaited before the next item advances |
+| `Map(Func<T, Task<TResult>>, int maxConcurrency = int.MaxValue)` | Configurable N, default unbounded | Unordered | Emits results as selector tasks complete |
+| `MapOrdered(Func<T, Task<TResult>>, int maxConcurrency)` | Configurable N | Ordered | Runs selector tasks concurrently but buffers as needed to emit in source order |
 
-### Breaking Changes (0.x Release Cycle)
+## Confirmed Implementation Alignment
 
-Since we're in a 0.x release cycle, we'll do a clean break:
-- **Remove** `ParallelMap()` and `ParallelMapOrdered()` — replace with `Map()` and `MapOrdered()`
-- **Remove** `FlatMapMany()` and `FlatMapManyAwait()` — replace with `FlatMap()`, `ConcatMap()`, and `FlatMapOrdered()`
-- **No deprecation warnings** — clean API, no legacy baggage
-- Update all internal usage to use new names
+The current implementations in both `Stream<T>` and `ConnectableStream<T>` match the settled contract:
 
-### Design Principles
+- `Map(Func<T, TResult>)` delegates to a sequential iterator-based mapping path
+- `MapAwait(Func<T, ValueTask<TResult>>)` delegates to a sequential async iterator-based mapping path
+- `Map(Func<T, Task<TResult>>, int maxConcurrency)` delegates to the concurrent unordered task-mapping path
+- `MapOrdered(Func<T, Task<TResult>>, int maxConcurrency)` delegates to the concurrent ordered task-mapping path
 
-1. **Symmetric naming** - `Map` ↔ `MapOrdered` and `FlatMap` ↔ `FlatMapOrdered` for easy discovery
-2. **Unordered by default** - Methods without "Ordered" suffix are fastest (unbounded concurrency)
-3. **Configurable concurrency** - Ordered variants accept `maxConcurrency` parameter for tuning
-4. **Consistent with industry standards** - Aligns with RxJS, Rx.NET, and Project Reactor semantics
+Both implementations validate `maxConcurrency > 0` for the concurrent overloads.
 
-## Implementation Strategy
+## Related Operator Positioning
 
-**Clean break, no deprecation** — We're in 0.x, so we'll remove old names entirely and implement fresh.
+The broader 0.6 positioning around concurrency is:
 
-1. **Phase 1**: Remove old names (`ParallelMap`, `ParallelMapOrdered`, `FlatMapMany`, `FlatMapManyAwait`) from IStream
-2. **Phase 2**: Add new signatures (`Map`, `MapOrdered`, `FlatMap`, `ConcatMap`, `FlatMapOrdered`)
-3. **Phase 3**: Implement all five operators in Stream.cs and ConnectableStream.cs
-4. **Phase 4**: Update all internal code and tests to use new names
-5. **Phase 5**: Write comprehensive concurrency tests
-6. **Phase 6**: Update README and documentation
+| Operator | Concurrency | Ordering |
+|----------|-------------|----------|
+| `Map(Func<T, TResult>)` | 1 | Ordered |
+| `MapAwait(Func<T, ValueTask<TResult>>)` | 1 | Ordered |
+| `Map(Func<T, Task<TResult>>, ...)` | Configurable N | Unordered |
+| `MapOrdered(...)` | Configurable N | Ordered |
+| `FlatMap(...)` | Configurable N, default unbounded | Unordered |
+| `ConcatMap(...)` | 1 | Ordered |
+| `FlatMapOrdered(...)` | Configurable N | Ordered |
 
-## Files Affected
+## Guidance for Follow-on Docs Work
 
-- `src/Streamix/IStream.cs` - Interface definitions
-- `src/Streamix/Implementations/Stream.cs` - Implementation
-- `src/Streamix/Implementations/ConnectableStream.cs` - Core logic for concurrent operations
-- `src/Streamix.Tests/ConcurrencyTests.cs` - Concurrency validation tests
-- `README.md` - Update examples and operator reference
-- `docs/CONCURRENCY.md` - This file (design rationale)
+Task 2 should align public-facing docs to this settled contract without changing the API surface. In particular, the following wording must be corrected where it appears:
 
----
+- any wording that describes `Map()` generically as unordered or fastest
+- any examples that imply the synchronous `Map` overload is concurrent
+- any summary tables that collapse all `Map` overloads into one concurrency story
+
+README and XML docs should describe overload-specific behavior explicitly.

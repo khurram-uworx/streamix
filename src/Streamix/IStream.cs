@@ -10,6 +10,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
 {
     /// <summary>
     /// Projects each element of a stream into a new form using a synchronous selector function.
+    /// This overload is sequential and preserves source ordering.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
@@ -18,6 +19,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
 
     /// <summary>
     /// Projects each element of a stream into a new form using an asynchronous selector function.
+    /// This overload is sequential and preserves source ordering by awaiting each selector invocation before advancing.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -27,7 +29,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <summary>
     /// Projects each element of a stream into a new form by applying an asynchronous selector concurrently.
     /// Results are emitted as soon as they complete, so upstream ordering is not preserved.
-    /// This is a high-throughput variant for async transforms and defaults to unbounded concurrency.
+    /// This is the concurrent unordered <c>Map</c> overload and defaults to unbounded concurrency.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -38,6 +40,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <summary>
     /// Projects each element of a stream into a new form by applying an asynchronous selector concurrently while preserving upstream ordering.
     /// Results are buffered as necessary to ensure they are emitted in source order.
+    /// This is the concurrent ordered <c>Map</c> overload.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>

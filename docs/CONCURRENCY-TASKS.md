@@ -28,7 +28,7 @@ This document breaks the gaps identified in [docs/CONCURRENCY-REVIEW.md](E:\khur
   - `src/Streamix/Implementations/ConnectableStream.cs`
   - `src/Streamix/Extensions/LinqExtensions.cs`
 
-## Task 1: Record and Apply Chosen `Map` Concurrency Contract
+## ✅ Task 1: Record and Apply Chosen `Map` Concurrency Contract
 
 ### Priority
 
