@@ -81,7 +81,7 @@ None. The decision is already made:
 - `src/Streamix/IStream.cs`
 - `README.md`
 
-## Task 2: Align README and API Docs with the Chosen `Map` Contract
+## ✅ Task 2: Align README and API Docs with the Chosen `Map` Contract
 
 ### Priority
 

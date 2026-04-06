@@ -64,7 +64,9 @@ var orders =
 
 Available patterns include:
 
-* `Map` / `MapAwait` / `MapOrdered`
+* `Map` / `MapAwait` - 1:1 transforms, sequential and ordered
+* `Map(Func<T, Task<TResult>>, maxConcurrency)` - 1:1 transform, concurrent and unordered
+* `MapOrdered` - 1:1 transform, concurrent and ordered
 * `Filter` / `FilterAwait`
 * `FlatMap` / `FlatMapAwait` — 1:1 or 1:N transforms, unordered concurrent by default
 * `ConcatMap` — 1:N transform, sequential and ordered
@@ -74,11 +76,16 @@ Available patterns include:
 
 ## ⚙️ Concurrency & Backpressure
 
-Streamix provides explicit control over concurrency and ordering. Operators without the `Ordered` suffix are generally unordered and concurrent by default, providing the highest throughput.
+Streamix provides explicit control over concurrency and ordering, but the `Map` family is overload-specific for 0.6.
+
+- `Map(Func<T, TResult>)` and `MapAwait(Func<T, ValueTask<TResult>>)` are sequential and ordered.
+- `Map(Func<T, Task<TResult>>, int maxConcurrency = int.MaxValue)` is concurrent and unordered.
+- `MapOrdered(Func<T, Task<TResult>>, int maxConcurrency)` is concurrent and ordered.
+- `FlatMap` and `FlatMapAwait` are the unordered concurrent flattening operators by default.
 
 ```csharp
 await stream
-    .Map(async x => await ProcessAsync(x), maxConcurrency: 5)
+    .Map(async x => await ProcessAsync(x), maxConcurrency: 5) // task-returning overload
     .ForEachAsync(Console.WriteLine);
 ```
 
@@ -86,8 +93,10 @@ await stream
 
 | Operator | Concurrency | Ordering | Use Case | Performance |
 |----------|-------------|----------|----------|-------------|
-| `Map()` | Unbounded | Unordered | Fire-and-forget, fastest 1:1 transform | ⭐⭐⭐ |
-| `MapOrdered()` | Configurable N | Ordered | Transform while preserving source order | ⭐⭐ |
+| `Map(Func<T, TResult>)` | 1 | Ordered | Synchronous projection with minimal overhead | ⭐ |
+| `MapAwait(Func<T, ValueTask<TResult>>)` | 1 | Ordered | Async projection when each item must complete before the next advances | ⭐ |
+| `Map(Func<T, Task<TResult>>, ...)` | Configurable N, default unbounded | Unordered | Highest-throughput async 1:1 transform | ⭐⭐⭐ |
+| `MapOrdered()` | Configurable N | Ordered | Async transform while preserving source order | ⭐⭐ |
 | `FlatMap()` | Unbounded | Unordered | Fire-and-forget, fastest 1:N expansion | ⭐⭐⭐ |
 | `FlatMapOrdered()` | Configurable N | Ordered | Expand while preserving source order | ⭐⭐ |
 | `ConcatMap()` | 1 (Sequential) | Ordered | Strict sequential processing | ⭐ |
@@ -425,7 +434,7 @@ var retried = stream
 
 Streamix is designed for high-performance asynchronous streaming with the following characteristics:
 
-- **Backpressure by Design**: Concurrent operators like `FlatMap`, `FlatMapOrdered`, `Merge`, and concurrent `Map` utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unboundemented memory growth.
+- **Backpressure by Design**: Concurrent operators like `FlatMap`, `FlatMapOrdered`, `Merge`, and the task-returning concurrent `Map` overload utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unbounded memory growth.
 - **Zero-Allocation Sequential Operators**: Basic operators like `Map`, `Filter`, `Take`, and `Skip` are implemented as thin wrappers over `IAsyncEnumerable<T>` using async iterators. They introduce minimal overhead and do not involve intermediate buffering.
 - **Bounded Concurrency**: All flattening and parallel operators accept a `maxConcurrency` parameter, allowing you to strictly control the number of simultaneous asynchronous operations.
 - **Materialization Awareness**: Operators that require state across multiple items, such as `Buffer(count)`, `Window(count)`, or `Replay(bufferSize)`, involve allocations proportional to their requested size. These should be used with appropriate bounds to manage memory usage.
