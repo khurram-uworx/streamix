@@ -178,6 +178,12 @@ var replayed = Stream.Range(1, 3).Replay(2);
 
 Streamix supports both **fluent and query comprehension syntax**:
 
+For now, LINQ is a convenience layer rather than the full concurrency-control surface:
+
+- `Where` / `Select` and their async counterparts stay sequential and ordered.
+- `SelectMany` / `SelectManyAsync` are the unordered flattening helpers.
+- Use fluent operators such as `FlatMap`, `ConcatMap`, and `FlatMapOrdered` when you need explicit unordered, sequential, or ordered flattening control.
+
 ```csharp
 // Query syntax (from...where...select)
 var result = await (
@@ -196,7 +202,11 @@ var result = await Stream.Range(1, 10)
 var result = await Stream.Range(1, 10)
     .WhereAsync(async x => await ValidateAsync(x))
     .SelectAsync(async x => await FetchAsync(x))
-    .SelectManyAsync(async x => await GetStream(x), maxConcurrency: 3)
+    .SelectManyAsync(async x => await GetStream(x), maxConcurrency: 3) // unordered flattening
+    .ToListAsync();
+
+var ordered = await Stream.Range(1, 10)
+    .FlatMapOrdered(x => GetStream(x), maxConcurrency: 3)
     .ToListAsync();
 ```
 

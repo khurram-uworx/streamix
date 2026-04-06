@@ -176,7 +176,7 @@ None. The decision is already made:
 - `README.md`
 - `docs/CONCURRENCY.md`
 
-## Task 4: Align LINQ Docs to the Chosen Concurrency Scope
+## ✅ Task 4: Align LINQ Docs to the Chosen Concurrency Scope
 
 ### Priority
 
