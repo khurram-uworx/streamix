@@ -575,25 +575,25 @@ public sealed class Stream<T> : IStream<T>
 
                         var item = enumerator.Current;
 
-                    var task = Task.Run(async () =>
-                    {
-                        try
+                        var task = Task.Run(async () =>
                         {
-                            await foreach (var result in selector(item).WithCancellation(cts.Token))
-                                await channel.Writer.WriteAsync(result, cts.Token);
-                        }
-                        catch (Exception ex)
-                        {
-                            channel.Writer.TryComplete(ex);
-                            throw;
-                        }
-                        finally
-                        {
-                            semaphore.Release();
-                        }
-                    }, cts.Token);
+                            try
+                            {
+                                await foreach (var result in selector(item).WithCancellation(cts.Token))
+                                    await channel.Writer.WriteAsync(result, cts.Token);
+                            }
+                            catch (Exception ex)
+                            {
+                                channel.Writer.TryComplete(ex);
+                                throw;
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
+                        }, cts.Token);
 
-                    tasks.Add(task);
+                        tasks.Add(task);
                         tasks.RemoveAll(t => t.IsCompleted);
                     }
                 }
@@ -651,7 +651,7 @@ public sealed class Stream<T> : IStream<T>
         }
     }
 
-    async IAsyncEnumerable<TResult> flatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<TResult> flatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency, int maxBufferedItemsPerInner, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (maxConcurrency == 1)
         {
@@ -684,7 +684,7 @@ public sealed class Stream<T> : IStream<T>
                         }
 
                         var item = enumerator.Current;
-                        var innerChannel = Channel.CreateBounded<TResult>(16);
+                        var innerChannel = Channel.CreateBounded<TResult>(maxBufferedItemsPerInner);
 
                         var task = Task.Run(async () =>
                         {
@@ -1350,10 +1350,11 @@ public sealed class Stream<T> : IStream<T>
     }
 
     /// <inheritdoc />
-    public IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency)
+    public IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency = int.MaxValue, int maxBufferedItemsPerInner = 16)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapOrdered(selector, maxConcurrency));
+        if (maxBufferedItemsPerInner <= 0) throw new ArgumentOutOfRangeException(nameof(maxBufferedItemsPerInner), "Max buffered items per inner must be greater than 0.");
+        return Stream.From(flatMapOrdered(selector, maxConcurrency, maxBufferedItemsPerInner));
     }
 
     /// <inheritdoc />

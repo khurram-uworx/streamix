@@ -76,6 +76,79 @@ public class ConcurrencyTests
     }
 
     [Test]
+    public void FlatMapOrdered_RejectsNonPositiveLimits()
+    {
+        Assert.That(
+            () => Stream.Range(1, 3).FlatMapOrdered(x => Stream.From(x), maxConcurrency: 0),
+            Throws.TypeOf<ArgumentOutOfRangeException>().With.Property("ParamName").EqualTo("maxConcurrency"));
+
+        Assert.That(
+            () => Stream.Range(1, 3).FlatMapOrdered(x => Stream.From(x), maxConcurrency: 2, maxBufferedItemsPerInner: 0),
+            Throws.TypeOf<ArgumentOutOfRangeException>().With.Property("ParamName").EqualTo("maxBufferedItemsPerInner"));
+    }
+
+    [Test]
+    public async Task FlatMapOrdered_BoundsBufferedItemsPerInner()
+    {
+        var firstInnerCanContinue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondInnerAttemptedSecondWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdInnerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var stream = Stream.Range(1, 3)
+            .FlatMapOrdered(CreateInner, maxConcurrency: 2, maxBufferedItemsPerInner: 1);
+
+        await using var enumerator = stream.GetAsyncEnumerator();
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(10));
+
+        await secondInnerAttemptedSecondWrite.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.Delay(100);
+        Assert.That(thirdInnerStarted.Task.IsCompleted, Is.False);
+
+        firstInnerCanContinue.SetResult();
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(11));
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(20));
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(21));
+        await thirdInnerStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(30));
+        Assert.That(await enumerator.MoveNextAsync(), Is.False);
+
+        IStream<int> CreateInner(int value)
+        {
+            return Stream.Create<int>(async emitter =>
+            {
+                if (value == 1)
+                {
+                    await emitter.EmitAsync(10);
+                    await firstInnerCanContinue.Task.WaitAsync(emitter.CancellationToken);
+                    await emitter.EmitAsync(11);
+                    emitter.Complete();
+                    return;
+                }
+
+                if (value == 2)
+                {
+                    await emitter.EmitAsync(20);
+                    secondInnerAttemptedSecondWrite.TrySetResult();
+                    await emitter.EmitAsync(21);
+                    emitter.Complete();
+                    return;
+                }
+
+                thirdInnerStarted.TrySetResult();
+                await emitter.EmitAsync(30);
+                emitter.Complete();
+            });
+        }
+    }
+
+    [Test]
     public async Task FlatMap_BackpressureBlocksProducer()
     {
         const int maxConcurrency = 2;
@@ -235,6 +308,124 @@ public class ConcurrencyTests
         // 1 SHOULD be first because it's ordered
         Assert.That(result[0], Is.EqualTo(1));
         Assert.That(result, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
+    public async Task MapOrdered_DefersLaterFailureUntilEarlierWorkCanDrain()
+    {
+        var firstCanComplete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var stream = Stream.Range(1, 2)
+            .MapOrdered(async x =>
+            {
+                if (x == 1)
+                {
+                    await firstCanComplete.Task;
+                    return 10;
+                }
+
+                secondFailed.TrySetResult();
+                throw new InvalidOperationException("Boom");
+            }, maxConcurrency: 2);
+
+        await using var enumerator = stream.GetAsyncEnumerator();
+
+        var firstMoveNextTask = enumerator.MoveNextAsync().AsTask();
+        await secondFailed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.Delay(100);
+        Assert.That(firstMoveNextTask.IsCompleted, Is.False);
+
+        firstCanComplete.SetResult();
+
+        Assert.That(await firstMoveNextTask, Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(10));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await enumerator.MoveNextAsync().AsTask());
+        Assert.That(exception?.Message, Is.EqualTo("Boom"));
+    }
+
+    [Test]
+    public async Task FlatMapOrdered_DefersLaterInnerFailureUntilEarlierInnerDrains()
+    {
+        var firstInnerCanContinue = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondInnerFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var stream = Stream.Range(1, 2)
+            .FlatMapOrdered(CreateInner, maxConcurrency: 2, maxBufferedItemsPerInner: 1);
+
+        await using var enumerator = stream.GetAsyncEnumerator();
+
+        Assert.That(await enumerator.MoveNextAsync(), Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(10));
+
+        await secondInnerFailed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var nextTask = enumerator.MoveNextAsync().AsTask();
+        await Task.Delay(100);
+        Assert.That(nextTask.IsCompleted, Is.False);
+
+        firstInnerCanContinue.SetResult();
+
+        Assert.That(await nextTask, Is.True);
+        Assert.That(enumerator.Current, Is.EqualTo(11));
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await enumerator.MoveNextAsync().AsTask());
+        Assert.That(exception?.Message, Is.EqualTo("Boom"));
+        return;
+
+        IStream<int> CreateInner(int value)
+        {
+            return Stream.Create<int>(async emitter =>
+            {
+                if (value == 1)
+                {
+                    await emitter.EmitAsync(10);
+                    await firstInnerCanContinue.Task.WaitAsync(emitter.CancellationToken);
+                    await emitter.EmitAsync(11);
+                    emitter.Complete();
+                    return;
+                }
+
+                secondInnerFailed.TrySetResult();
+                throw new InvalidOperationException("Boom");
+            });
+        }
+    }
+
+    [Test]
+    public void FlatMapOrdered_StopsPromptlyWhenConsumerCancels()
+    {
+        var innerCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellation = new CancellationTokenSource();
+
+        var stream = Stream.Range(1, 2)
+            .FlatMapOrdered(_ => Stream.Create<int>(async emitter =>
+            {
+                try
+                {
+                    await emitter.EmitAsync(1);
+                    await Task.Delay(Timeout.InfiniteTimeSpan, emitter.CancellationToken);
+                }
+                catch (TaskCanceledException) when (emitter.CancellationToken.IsCancellationRequested)
+                {
+                    innerCancelled.TrySetResult();
+                }
+                catch (OperationCanceledException) when (emitter.CancellationToken.IsCancellationRequested)
+                {
+                    innerCancelled.TrySetResult();
+                }
+            }), maxConcurrency: 2, maxBufferedItemsPerInner: 1);
+
+        Assert.ThrowsAsync<TaskCanceledException>(async () =>
+        {
+            await foreach (var item in stream.WithCancellation(cancellation.Token))
+            {
+                cancellation.Cancel();
+            }
+        });
+
+        Assert.That(async () => await innerCancelled.Task.WaitAsync(TimeSpan.FromSeconds(2)), Throws.Nothing);
     }
 
     [Test]

@@ -1,11 +1,123 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+
 namespace Streamix;
 
 /// <summary>
 /// Provides LINQ-style extension methods for <see cref="IStream{T}"/>.
 /// These extensions make it easy to work with streams using familiar LINQ patterns.
+/// For now they are a convenience layer and do not expose the full fluent concurrency-control surface.
 /// </summary>
 public static class LinqExtensions
 {
+    static async IAsyncEnumerable<TResult> selectManyAwaitConcurrent<T, TResult>(
+        IStream<T> source,
+        Func<T, ValueTask<IStream<TResult>>> selector,
+        int maxConcurrency,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+
+        if (maxConcurrency == 1)
+        {
+            await foreach (var item in source.WithCancellation(cancellationToken))
+            {
+                var innerStream = await selector(item);
+                await foreach (var innerItem in innerStream.WithCancellation(cancellationToken))
+                    yield return innerItem;
+            }
+
+            yield break;
+        }
+
+        var channel = Channel.CreateBounded<TResult>(maxConcurrency);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            var semaphore = new SemaphoreSlim(maxConcurrency);
+            var tasks = new List<Task>();
+
+            try
+            {
+                var enumerator = source.WithCancellation(cts.Token).GetAsyncEnumerator();
+
+                try
+                {
+                    while (true)
+                    {
+                        await semaphore.WaitAsync(cts.Token);
+
+                        if (!await enumerator.MoveNextAsync())
+                        {
+                            semaphore.Release();
+                            break;
+                        }
+
+                        var item = enumerator.Current;
+
+                        var task = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var innerStream = await selector(item);
+                                await foreach (var result in innerStream.WithCancellation(cts.Token))
+                                    await channel.Writer.WriteAsync(result, cts.Token);
+                            }
+                            catch (Exception ex)
+                            {
+                                channel.Writer.TryComplete(ex);
+                                throw;
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
+                        }, cts.Token);
+
+                        tasks.Add(task);
+                        tasks.RemoveAll(t => t.IsCompleted);
+                    }
+                }
+                finally
+                {
+                    await enumerator.DisposeAsync();
+                }
+
+                await Task.WhenAll(tasks);
+                channel.Writer.Complete();
+            }
+            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+            finally
+            {
+                try { await Task.WhenAll(tasks); } catch { }
+                semaphore.Dispose();
+            }
+        }, cts.Token);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+                while (channel.Reader.TryRead(out var result))
+                    yield return result;
+
+            await producerTask;
+            await channel.Reader.Completion;
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            try { await producerTask; } catch { }
+        }
+    }
 
     /// <summary>
     /// Filters a stream of values based on a predicate.
@@ -58,30 +170,35 @@ public static class LinqExtensions
     /// <summary>
     /// Projects each element of a stream to an <see cref="IStream{TResult}"/> and flattens the resulting streams into one stream.
     /// Results are emitted concurrently as they complete (unordered).
+    /// Use fluent operators such as <see cref="IStream{T}.ConcatMap{TResult}(Func{T, IStream{TResult}})"/> or <see cref="IStream{T}.FlatMapOrdered{TResult}(Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
     /// </summary>
     public static IStream<TResult> SelectMany<T, TResult>(this IStream<T> source, Func<T, IStream<TResult>> selector)
         => source.FlatMap(selector, maxConcurrency: int.MaxValue);
 
     /// <summary>
     /// Projects each element of a stream to an <see cref="IStream{TResult}"/> and flattens the resulting streams into one stream with concurrency support (unordered).
+    /// Use fluent operators such as <see cref="IStream{T}.ConcatMap{TResult}(Func{T, IStream{TResult}})"/> or <see cref="IStream{T}.FlatMapOrdered{TResult}(Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
     /// </summary>
     public static IStream<TResult> SelectMany<T, TResult>(this IStream<T> source, Func<T, IStream<TResult>> selector, int maxConcurrency)
         => source.FlatMap(selector, maxConcurrency);
 
     /// <summary>
     /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result concurrently (unordered).
+    /// Use fluent operators such as <see cref="IStream{T}.ConcatMap{TResult}(Func{T, IStream{TResult}})"/> or <see cref="IStream{T}.FlatMapOrdered{TResult}(Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
     /// </summary>
     public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector)
     {
-        return source.Map(item => selector(item).AsTask()).FlatMap(task => Streamix.Stream.From(task).FlatMap(s => s));
+        return Streamix.Stream.From(selectManyAwaitConcurrent(source, selector, int.MaxValue));
     }
 
     /// <summary>
     /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result with concurrency support (unordered).
+    /// Use fluent operators such as <see cref="IStream{T}.ConcatMap{TResult}(Func{T, IStream{TResult}})"/> or <see cref="IStream{T}.FlatMapOrdered{TResult}(Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
     /// </summary>
     public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency)
     {
-        return source.Map(item => selector(item).AsTask(), maxConcurrency).FlatMap(task => Streamix.Stream.From(task).FlatMap(s => s));
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+        return Streamix.Stream.From(selectManyAwaitConcurrent(source, selector, maxConcurrency));
     }
 
     /// <summary>

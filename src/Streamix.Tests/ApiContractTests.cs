@@ -29,6 +29,12 @@ public class ApiContractTests
         Assert.That(type.GetMethods().Any(m => m.Name == "FlatMap"), Is.True);
         Assert.That(type.GetMethod("ConcatMap"), Is.Not.Null);
         Assert.That(type.GetMethod("FlatMapOrdered"), Is.Not.Null);
+        var flatMapOrdered = type.GetMethod("FlatMapOrdered");
+        Assert.That(flatMapOrdered?.GetParameters().Length, Is.EqualTo(3));
+        Assert.That(flatMapOrdered?.GetParameters()[1].HasDefaultValue, Is.True);
+        Assert.That(flatMapOrdered?.GetParameters()[1].DefaultValue, Is.EqualTo(int.MaxValue));
+        Assert.That(flatMapOrdered?.GetParameters()[2].HasDefaultValue, Is.True);
+        Assert.That(flatMapOrdered?.GetParameters()[2].DefaultValue, Is.EqualTo(16));
         Assert.That(type.GetMethod("ParallelMap"), Is.Null);
         Assert.That(type.GetMethod("ParallelMapOrdered"), Is.Null);
         Assert.That(type.GetMethod("FlatMapMany"), Is.Null);

@@ -383,6 +383,43 @@ public class LinqExtensionsTests
     }
 
     [Test]
+    public async Task SelectManyAsync_With_Concurrency_Respects_Active_Inner_Stream_Limit()
+    {
+        const int maxConcurrency = 2;
+        int activeStreams = 0;
+        int maxObservedConcurrency = 0;
+        var lockObj = new object();
+
+        var result = await Stream.Range(1, 5)
+            .SelectManyAsync(
+                x => new ValueTask<IStream<int>>(Stream.Create<int>(async emitter =>
+                {
+                    var currentActive = Interlocked.Increment(ref activeStreams);
+
+                    lock (lockObj)
+                    {
+                        maxObservedConcurrency = Math.Max(maxObservedConcurrency, currentActive);
+                    }
+
+                    try
+                    {
+                        await emitter.EmitAsync(x);
+                        await Task.Delay(50, emitter.CancellationToken);
+                        emitter.Complete();
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref activeStreams);
+                    }
+                })),
+                maxConcurrency: maxConcurrency)
+            .ToListAsync();
+
+        Assert.That(maxObservedConcurrency, Is.LessThanOrEqualTo(maxConcurrency));
+        Assert.That(result, Is.EquivalentTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
     public async Task Combined_Async_And_Sync_Extensions()
     {
         var result = await Stream.Range(1, 10)

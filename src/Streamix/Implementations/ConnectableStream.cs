@@ -457,7 +457,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
-    async IAsyncEnumerable<TResult> flatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    async IAsyncEnumerable<TResult> flatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency, int maxBufferedItemsPerInner, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (maxConcurrency == 1)
         {
@@ -490,7 +490,7 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
                         }
 
                         var item = enumerator.Current;
-                        var innerChannel = Channel.CreateBounded<TResult>(16);
+                        var innerChannel = Channel.CreateBounded<TResult>(maxBufferedItemsPerInner);
 
                         var task = Task.Run(async () =>
                         {
@@ -1509,10 +1509,11 @@ sealed class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
-    public IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency)
+    public IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency = int.MaxValue, int maxBufferedItemsPerInner = 16)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapOrdered(selector, maxConcurrency), clock);
+        if (maxBufferedItemsPerInner <= 0) throw new ArgumentOutOfRangeException(nameof(maxBufferedItemsPerInner), "Max buffered items per inner must be greater than 0.");
+        return Stream.From(flatMapOrdered(selector, maxConcurrency, maxBufferedItemsPerInner), clock);
     }
 
     /// <inheritdoc />

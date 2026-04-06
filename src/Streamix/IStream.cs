@@ -10,6 +10,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
 {
     /// <summary>
     /// Projects each element of a stream into a new form using a synchronous selector function.
+    /// This overload is sequential and preserves source ordering.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
@@ -18,6 +19,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
 
     /// <summary>
     /// Projects each element of a stream into a new form using an asynchronous selector function.
+    /// This overload is sequential and preserves source ordering by awaiting each selector invocation before advancing.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -27,7 +29,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <summary>
     /// Projects each element of a stream into a new form by applying an asynchronous selector concurrently.
     /// Results are emitted as soon as they complete, so upstream ordering is not preserved.
-    /// This is a high-throughput variant for async transforms and defaults to unbounded concurrency.
+    /// This is the concurrent unordered <c>Map</c> overload and defaults to unbounded concurrency.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -38,6 +40,7 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <summary>
     /// Projects each element of a stream into a new form by applying an asynchronous selector concurrently while preserving upstream ordering.
     /// Results are buffered as necessary to ensure they are emitted in source order.
+    /// This is the concurrent ordered <c>Map</c> overload.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -116,12 +119,14 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <summary>
     /// Projects each element of a stream to another stream and merges the inner streams concurrently while preserving outer source ordering.
     /// Results from inner streams are buffered as necessary to ensure they are emitted in the same order as the source elements that produced them.
+    /// Each later inner stream may buffer up to <paramref name="maxBufferedItemsPerInner"/> items while waiting for earlier inners to drain.
     /// </summary>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
-    /// <param name="maxConcurrency">The maximum number of concurrent inner streams.</param>
+    /// <param name="maxConcurrency">The maximum number of concurrent inner streams. Defaults to unbounded concurrency.</param>
+    /// <param name="maxBufferedItemsPerInner">The maximum number of buffered items allowed per inner stream while preserving outer ordering. Defaults to 16.</param>
     /// <returns>An <see cref="IStream{TResult}"/> that emits inner stream items grouped in original source order.</returns>
-    IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency);
+    IStream<TResult> FlatMapOrdered<TResult>(Func<T, IStream<TResult>> selector, int maxConcurrency = int.MaxValue, int maxBufferedItemsPerInner = 16);
 
     /// <summary>
     /// Returns a specified number of contiguous elements from the start of a stream.

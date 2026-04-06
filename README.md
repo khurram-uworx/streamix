@@ -64,7 +64,9 @@ var orders =
 
 Available patterns include:
 
-* `Map` / `MapAwait` / `MapOrdered`
+* `Map` / `MapAwait` - 1:1 transforms, sequential and ordered
+* `Map(Func<T, Task<TResult>>, maxConcurrency)` - 1:1 transform, concurrent and unordered
+* `MapOrdered` - 1:1 transform, concurrent and ordered
 * `Filter` / `FilterAwait`
 * `FlatMap` / `FlatMapAwait` — 1:1 or 1:N transforms, unordered concurrent by default
 * `ConcatMap` — 1:N transform, sequential and ordered
@@ -74,11 +76,16 @@ Available patterns include:
 
 ## ⚙️ Concurrency & Backpressure
 
-Streamix provides explicit control over concurrency and ordering. Operators without the `Ordered` suffix are generally unordered and concurrent by default, providing the highest throughput.
+Streamix provides explicit control over concurrency and ordering.
+
+- `Map(Func<T, TResult>)` and `MapAwait(Func<T, ValueTask<TResult>>)` are sequential and ordered.
+- `Map(Func<T, Task<TResult>>, int maxConcurrency = int.MaxValue)` is concurrent and unordered.
+- `MapOrdered(Func<T, Task<TResult>>, int maxConcurrency)` is concurrent and ordered.
+- `FlatMap` and `FlatMapAwait` are the unordered concurrent flattening operators by default.
 
 ```csharp
 await stream
-    .Map(async x => await ProcessAsync(x), maxConcurrency: 5)
+    .Map(async x => await ProcessAsync(x), maxConcurrency: 5) // task-returning overload
     .ForEachAsync(Console.WriteLine);
 ```
 
@@ -86,13 +93,22 @@ await stream
 
 | Operator | Concurrency | Ordering | Use Case | Performance |
 |----------|-------------|----------|----------|-------------|
-| `Map()` | Unbounded | Unordered | Fire-and-forget, fastest 1:1 transform | ⭐⭐⭐ |
-| `MapOrdered()` | Configurable N | Ordered | Transform while preserving source order | ⭐⭐ |
+| `Map(Func<T, TResult>)` | 1 | Ordered | Synchronous projection with minimal overhead | ⭐ |
+| `MapAwait(Func<T, ValueTask<TResult>>)` | 1 | Ordered | Async projection when each item must complete before the next advances | ⭐ |
+| `Map(Func<T, Task<TResult>>, ...)` | Configurable N, default unbounded | Unordered | Highest-throughput async 1:1 transform | ⭐⭐⭐ |
+| `MapOrdered()` | Configurable N | Ordered | Async transform while preserving source order | ⭐⭐ |
 | `FlatMap()` | Unbounded | Unordered | Fire-and-forget, fastest 1:N expansion | ⭐⭐⭐ |
-| `FlatMapOrdered()` | Configurable N | Ordered | Expand while preserving source order | ⭐⭐ |
+| `FlatMapOrdered()` | Configurable N | Ordered | Expand while preserving source order with explicit per-inner buffering | ⭐⭐ |
 | `ConcatMap()` | 1 (Sequential) | Ordered | Strict sequential processing | ⭐ |
 
 When Streamix uses bounded channels internally, producers pause when buffers are full instead of unboundedly accumulating work.
+
+Ordered operators have explicit runtime semantics:
+
+- `MapOrdered` and `FlatMapOrdered` preserve source order even when later work finishes first.
+- Later ordered results or failures are not observed until earlier ordered work has been drained.
+- `FlatMapOrdered` may buffer later inner items up to `maxBufferedItemsPerInner` while waiting for earlier inners.
+- Cancelling enumeration stops waiting and propagates cancellation into the ordered operator's in-flight work.
 
 ---
 
@@ -169,6 +185,12 @@ var replayed = Stream.Range(1, 3).Replay(2);
 
 Streamix supports both **fluent and query comprehension syntax**:
 
+For now, LINQ is a convenience layer rather than the full concurrency-control surface:
+
+- `Where` / `Select` and their async counterparts stay sequential and ordered.
+- `SelectMany` / `SelectManyAsync` are the unordered flattening helpers.
+- Use fluent operators such as `FlatMap`, `ConcatMap`, and `FlatMapOrdered` when you need explicit unordered, sequential, or ordered flattening control.
+
 ```csharp
 // Query syntax (from...where...select)
 var result = await (
@@ -187,7 +209,11 @@ var result = await Stream.Range(1, 10)
 var result = await Stream.Range(1, 10)
     .WhereAsync(async x => await ValidateAsync(x))
     .SelectAsync(async x => await FetchAsync(x))
-    .SelectManyAsync(async x => await GetStream(x), maxConcurrency: 3)
+    .SelectManyAsync(async x => await GetStream(x), maxConcurrency: 3) // unordered flattening
+    .ToListAsync();
+
+var ordered = await Stream.Range(1, 10)
+    .FlatMapOrdered(x => GetStream(x), maxConcurrency: 3)
     .ToListAsync();
 ```
 
@@ -425,7 +451,7 @@ var retried = stream
 
 Streamix is designed for high-performance asynchronous streaming with the following characteristics:
 
-- **Backpressure by Design**: Concurrent operators like `FlatMap`, `FlatMapOrdered`, `Merge`, and concurrent `Map` utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unboundemented memory growth.
+- **Backpressure by Design**: Concurrent operators like `FlatMap`, `FlatMapOrdered`, `Merge`, and the task-returning concurrent `Map` overload utilize bounded `System.Threading.Channels`. This ensures that if a consumer is slower than the producer, the producer is naturally paused once the internal buffers are full, preventing unbounded memory growth.
 - **Zero-Allocation Sequential Operators**: Basic operators like `Map`, `Filter`, `Take`, and `Skip` are implemented as thin wrappers over `IAsyncEnumerable<T>` using async iterators. They introduce minimal overhead and do not involve intermediate buffering.
 - **Bounded Concurrency**: All flattening and parallel operators accept a `maxConcurrency` parameter, allowing you to strictly control the number of simultaneous asynchronous operations.
 - **Materialization Awareness**: Operators that require state across multiple items, such as `Buffer(count)`, `Window(count)`, or `Replay(bufferSize)`, involve allocations proportional to their requested size. These should be used with appropriate bounds to manage memory usage.
