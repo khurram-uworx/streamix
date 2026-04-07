@@ -1255,6 +1255,54 @@ class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> onBackpressureBuffer(int capacity, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var channel = Channel.CreateBounded<T>(capacity);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var item in this.WithCancellation(cts.Token))
+                {
+                    if (!channel.Writer.TryWrite(item))
+                    {
+                        throw new BackpressureException($"Buffer overflow: capacity of {capacity} reached.");
+                    }
+                }
+                channel.Writer.Complete();
+            }
+            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+        }, cts.Token);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                }
+            }
+
+            await producerTask;
+            await channel.Reader.Completion;
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            try { await producerTask; } catch { }
+        }
+    }
+
     async IAsyncEnumerable<T> doOnNext(Action<T> onNext, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
@@ -1349,7 +1397,8 @@ class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> OnBackpressureBuffer(int capacity)
     {
-        throw new NotImplementedException();
+        if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than 0.");
+        return Streamix.Stream.From(onBackpressureBuffer(capacity), clock);
     }
 
     /// <inheritdoc />

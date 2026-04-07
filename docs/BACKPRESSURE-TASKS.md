@@ -10,7 +10,7 @@ Reference: `docs/BACKPRESSURE.md`
 
 1. **✅ Task 1**: Define `BackpressureException` and backpressure strategy enum
 2. **✅ Task 2**: Add backpressure operator methods to `IStream<T>` interface
-3. **Task 3**: Implement `OnBackpressureBuffer` operator
+3. **✅ Task 3**: Implement `OnBackpressureBuffer` operator
 4. **Task 4**: Implement `OnBackpressureDrop` operator
 5. **Task 5**: Implement `OnBackpressureLatest` operator
 6. **Task 6**: Implement `OnBackpressureError` operator
