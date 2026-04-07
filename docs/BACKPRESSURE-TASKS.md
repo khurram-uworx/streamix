@@ -8,7 +8,7 @@ Reference: `docs/BACKPRESSURE.md`
 
 ## Suggested Execution Order
 
-1. **Task 1**: Define `BackpressureException` and backpressure strategy enum
+1. **✅ Task 1**: Define `BackpressureException` and backpressure strategy enum
 2. **Task 2**: Add backpressure operator methods to `IStream<T>` interface
 3. **Task 3**: Implement `OnBackpressureBuffer` operator
 4. **Task 4**: Implement `OnBackpressureDrop` operator
@@ -27,7 +27,7 @@ Reference: `docs/BACKPRESSURE.md`
 
 ---
 
-## Task 1: Define BackpressureException and Strategy Types
+## ✅ Task 1: Define BackpressureException and Strategy Types
 
 ### Priority
 
