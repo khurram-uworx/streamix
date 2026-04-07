@@ -210,6 +210,35 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Timeout(TimeSpan interval);
 
     /// <summary>
+    /// Buffers items up to <paramref name="capacity"/> when downstream is slow.
+    /// Throws <see cref="BackpressureException"/> if buffer overflows.
+    /// </summary>
+    /// <param name="capacity">Maximum number of items to buffer.</param>
+    /// <returns>A stream with backpressure buffering strategy applied.</returns>
+    IStream<T> OnBackpressureBuffer(int capacity);
+
+    /// <summary>
+    /// Drops items when downstream cannot keep pace.
+    /// The most recent item is always emitted when the consumer catches up.
+    /// </summary>
+    /// <returns>A stream with backpressure drop strategy applied.</returns>
+    IStream<T> OnBackpressureDrop();
+
+    /// <summary>
+    /// Keeps only the latest item when downstream is slow.
+    /// Older items in the buffer are discarded in favor of newer ones.
+    /// </summary>
+    /// <returns>A stream with backpressure latest strategy applied.</returns>
+    IStream<T> OnBackpressureLatest();
+
+    /// <summary>
+    /// Throws a <see cref="BackpressureException"/> when downstream cannot keep pace.
+    /// Signals immediate failure rather than buffering or dropping items.
+    /// </summary>
+    /// <returns>A stream with backpressure error strategy applied.</returns>
+    IStream<T> OnBackpressureError();
+
+    /// <summary>
     /// Resumes a stream with another stream if an error occurs.
     /// </summary>
     /// <param name="errorHandler">A function that returns a fallback stream given the exception.</param>
