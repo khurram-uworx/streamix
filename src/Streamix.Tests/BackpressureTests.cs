@@ -257,4 +257,61 @@ public class BackpressureTests
         Assert.That(results.First(), Is.EqualTo(1));
         Assert.That(results, Does.Not.Contain(100));
     }
+
+    [Test]
+    public async Task OnBackpressureError_ThrowsOnBackpressure()
+    {
+        // Arrange
+        var stream = Stream.Create<int>(async emitter =>
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                await emitter.EmitAsync(i);
+            }
+        }).OnBackpressureError();
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<BackpressureException>(async () =>
+        {
+            await foreach (var item in stream)
+            {
+                // Slow down consumption to trigger overflow
+                await Task.Delay(50);
+            }
+        });
+
+        Assert.That(ex.Message, Does.Contain("Downstream cannot keep pace."));
+    }
+
+    [Test]
+    public async Task OnBackpressureError_ConnectableStream_ThrowsOnBackpressure()
+    {
+        // Arrange
+        var connectable = Stream.Create<int>(async emitter =>
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                await emitter.EmitAsync(i);
+            }
+        }).Replay(20);
+
+        var stream = connectable.OnBackpressureError();
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<BackpressureException>(async () =>
+        {
+            var resultsTask = Task.Run(async () =>
+            {
+                await foreach (var item in stream)
+                {
+                    await Task.Delay(50);
+                }
+            });
+
+            using var connection = connectable.Connect();
+            await resultsTask;
+        });
+
+        Assert.That(ex.Message, Does.Contain("Downstream cannot keep pace."));
+    }
 }
