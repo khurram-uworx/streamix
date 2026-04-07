@@ -75,9 +75,9 @@ stream
 ### `OnBackpressureDrop()`
 
 **Behavior:**
-- Items are dropped when the internal buffer is full
-- The most recent item is always emitted when the consumer catches up
-- Suitable for: Real-time data streams (metrics, events) where recent values matter more than historical ones
+- Items are dropped when the internal buffer is full (i.e., new items are discarded)
+- The items currently in the buffer are preserved
+- Suitable for: Scenarios where you want to keep existing work and discard any new work that arrives while the consumer is busy
 
 **Example:**
 ```csharp

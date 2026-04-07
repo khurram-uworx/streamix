@@ -182,4 +182,79 @@ public class BackpressureTests
         // Assert
         Assert.That(results, Is.EqualTo(new[] { 1, 5 }));
     }
+
+    [Test]
+    public async Task OnBackpressureDrop_NoDropsWhenProducerIsSlow()
+    {
+        // Arrange
+        var stream = Stream.Create<int>(async emitter =>
+        {
+            for (int i = 1; i <= 5; i++)
+            {
+                await emitter.EmitAsync(i);
+                await Task.Delay(100); // Plenty of time for consumer
+            }
+        }).OnBackpressureDrop();
+
+        // Act
+        var results = await stream.ToListAsync();
+
+        // Assert
+        Assert.That(results, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+    }
+
+    [Test]
+    public async Task OnBackpressureDrop_FastProducerSlowConsumer_DropsNewItems()
+    {
+        // Arrange
+        var stream = Stream.Range(1, 100).OnBackpressureDrop();
+
+        // Act
+        var results = new List<int>();
+        await foreach (var item in stream)
+        {
+            results.Add(item);
+            // Slow down consumer to force drops
+            await Task.Delay(10);
+        }
+
+        // Assert
+        // We should have dropped some items.
+        Assert.That(results.Count, Is.LessThan(100));
+        // With DropWrite, we should have the earlier items and NOT the last item.
+        Assert.That(results.First(), Is.EqualTo(1));
+        Assert.That(results, Does.Not.Contain(100));
+    }
+
+    [Test]
+    public async Task OnBackpressureDrop_ConnectableStream_DropsNewItems()
+    {
+        // Arrange
+        // Use Replay to ensure we don't miss items due to the race between subscription and connection
+        var connectable = Stream.Range(1, 100).Replay(100);
+        var stream = connectable.OnBackpressureDrop();
+
+        // Act
+        var results = new List<int>();
+        var resultsTask = Task.Run(async () =>
+        {
+            await foreach (var item in stream)
+            {
+                results.Add(item);
+                // Slow down consumer to force drops in the OnBackpressureDrop operator
+                await Task.Delay(20);
+            }
+        });
+
+        // Small delay to ensure the resultsTask has started and its producer task has registered as a subscriber
+        await Task.Delay(100);
+
+        using var connection = connectable.Connect();
+        await resultsTask;
+
+        // Assert
+        Assert.That(results.Count, Is.LessThan(100));
+        Assert.That(results.First(), Is.EqualTo(1));
+        Assert.That(results, Does.Not.Contain(100));
+    }
 }

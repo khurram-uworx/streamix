@@ -11,7 +11,7 @@ Reference: `docs/BACKPRESSURE.md`
 1. **✅ Task 1**: Define `BackpressureException` and backpressure strategy enum
 2. **✅ Task 2**: Add backpressure operator methods to `IStream<T>` interface
 3. **✅ Task 3**: Implement `OnBackpressureBuffer` operator
-4. **Task 4**: Implement `OnBackpressureDrop` operator
+4. **✅ Task 4**: Implement `OnBackpressureDrop` operator
 5. **✅ Task 5**: Implement `OnBackpressureLatest` operator
 6. **Task 6**: Implement `OnBackpressureError` operator
 7. **Task 7**: Add comprehensive tests for all strategies
@@ -191,7 +191,7 @@ Core backpressure strategy for scenarios where temporary queuing is acceptable b
 
 ---
 
-## Task 4: Implement OnBackpressureDrop Operator
+## ✅ Task 4: Implement OnBackpressureDrop Operator
 
 ### Priority
 
@@ -199,11 +199,11 @@ Core backpressure strategy for scenarios where temporary queuing is acceptable b
 
 ### Goal
 
-Implement the `OnBackpressureDrop()` operator so streams drop items when downstream cannot keep pace, always emitting the most recent item.
+Implement the `OnBackpressureDrop()` operator so streams drop items when downstream cannot keep pace, discarding new items when the buffer is full.
 
 ### Why this exists
 
-Essential for real-time data streams (metrics, events) where recent values are more important than historical ones. Missing old events is acceptable.
+Useful for scenarios where you want to keep existing work in progress and ignore new incoming work while the consumer is busy.
 
 ### Decision required
 
@@ -220,7 +220,7 @@ Essential for real-time data streams (metrics, events) where recent values are m
 ### Constraints
 
 - Must preserve FIFO semantics for items that fit in the buffer
-- When dropping, discard the oldest, keep the newest
+- When dropping, discard the newest (incoming) items, keep the oldest (currently buffered)
 - Operator must be composable (if a later backpressure operator is chained, it overrides this one)
 
 ### Suggested implementation path
@@ -229,18 +229,18 @@ Essential for real-time data streams (metrics, events) where recent values are m
 2. Add public method `IStream<T> OnBackpressureDrop()`
 3. Create private async method to manage the drop semantics:
    - Create a bounded `Channel<T>` (suggest capacity 1 or configurable small value)
-   - Use `TryWrite` with `ChannelFullMode.DropWrite` or implement custom logic to drop oldest
+   - Use `TryWrite` with `ChannelFullMode.DropWrite`
    - Ensure no exceptions during normal operation
 4. Add unit tests in `BackpressureTests.cs` (Task 7)
 
 ### Acceptance criteria
 
 - Stream can be created with `stream.OnBackpressureDrop()`
-- When buffer is full, the oldest item is dropped, newest is added
+- When buffer is full, new incoming items are dropped
 - No exception is thrown during normal operation
 - Items are correctly emitted downstream without gaps (except intentional drops)
 - Operator chains correctly with other operators
-- Test verifies that only the most recent item is emitted when producer is much faster than consumer
+- Test verifies that items are dropped when producer is much faster than consumer
 
 ### Files likely involved
 
