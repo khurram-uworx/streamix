@@ -103,6 +103,31 @@ await stream
 
 When Streamix uses bounded channels internally, producers pause when buffers are full instead of unboundedly accumulating work.
 
+### Backpressure Strategies
+
+While Streamix provides implicit backpressure, you can explicitly control how to handle overflow when a producer outpaces a consumer.
+
+*   **`OnBackpressureBuffer(capacity)`**: Buffers items up to capacity; throws `BackpressureException` on overflow.
+*   **`OnBackpressureDrop()`**: Discards new items when the consumer is busy.
+*   **`OnBackpressureLatest()`**: Keeps only the most recent item, discarding intermediate ones.
+*   **`OnBackpressureError()`**: Immediately fails with `BackpressureException` if the consumer cannot keep up.
+
+```csharp
+// Buffer up to 100 items before failing
+await stream.OnBackpressureBuffer(100).ForEachAsync(ProcessAsync);
+
+// Drop metrics if the logging backend is slow
+await metrics.OnBackpressureDrop().ForEachAsync(LogAsync);
+
+// Keep only the latest state update
+await state.OnBackpressureLatest().ForEachAsync(UpdateUIAsync);
+
+// Fail immediately if consumer falls behind
+await stream.OnBackpressureError().ForEachAsync(CriticalProcessAsync);
+```
+
+See [docs/BACKPRESSURE.md](docs/BACKPRESSURE.md) for more details.
+
 Ordered operators have explicit runtime semantics:
 
 - `MapOrdered` and `FlatMapOrdered` preserve source order even when later work finishes first.

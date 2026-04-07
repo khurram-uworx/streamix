@@ -176,6 +176,35 @@ This avoids confusion and aligns with reactive library conventions.
 - **Load tests**: Producer/consumer mismatch scenarios (fast producer, slow consumer)
 - **Exception tests**: Verify correct exception types and messages
 
+## Common Patterns
+
+### Metrics & Logging (Drop Strategy)
+When collecting metrics or logging events, it's often better to drop some data than to crash the application or slow down the main processing logic.
+```csharp
+var metrics = Stream.Poll(TimeSpan.FromMilliseconds(10), GetMetricAsync);
+
+await metrics
+    .OnBackpressureDrop()
+    .ForEachAsync(async m => await LogToSlowBackend(m));
+```
+
+### UI & State Updates (Latest Strategy)
+For UI updates or configuration changes, only the most recent value is usually relevant. If the consumer is slow, intermediate values can safely be skipped.
+```csharp
+configUpdates
+    .OnBackpressureLatest()
+    .ForEachAsync(async cfg => await ReloadConfig(cfg));
+```
+
+### Strict Validation (Error/Buffer Strategy)
+In scenarios where data loss is unacceptable and overflow indicates a critical system bottleneck, use `OnBackpressureError` or a fixed-size `OnBackpressureBuffer`.
+```csharp
+// Fail fast if processing cannot keep up with incoming orders
+await orders
+    .OnBackpressureError()
+    .ForEachAsync(ProcessOrderAsync);
+```
+
 ## Future Considerations
 
 1. **`OnBackpressureSkipDuplicate()`**: Skip consecutive duplicate items (useful for state streams)

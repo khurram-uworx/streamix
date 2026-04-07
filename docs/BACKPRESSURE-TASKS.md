@@ -15,7 +15,7 @@ Reference: `docs/BACKPRESSURE.md`
 5. **✅ Task 5**: Implement `OnBackpressureLatest` operator
 6. **✅ Task 6**: Implement `OnBackpressureError` operator
 7. ✅ **Task 7**: Add comprehensive tests for all strategies
-8. **Task 8**: Add examples to README and docs
+8. ✅ **Task 8**: Add examples to README and docs
 
 ## Coordination Notes
 
@@ -422,7 +422,7 @@ Ensures each strategy behaves as documented. Critical for catching edge cases (e
 
 ---
 
-## Task 8: Update Documentation and Examples
+## ✅ Task 8: Update Documentation and Examples
 
 ### Priority
 
