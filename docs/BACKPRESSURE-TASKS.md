@@ -12,7 +12,7 @@ Reference: `docs/BACKPRESSURE.md`
 2. **✅ Task 2**: Add backpressure operator methods to `IStream<T>` interface
 3. **✅ Task 3**: Implement `OnBackpressureBuffer` operator
 4. **Task 4**: Implement `OnBackpressureDrop` operator
-5. **Task 5**: Implement `OnBackpressureLatest` operator
+5. **✅ Task 5**: Implement `OnBackpressureLatest` operator
 6. **Task 6**: Implement `OnBackpressureError` operator
 7. **Task 7**: Add comprehensive tests for all strategies
 8. **Task 8**: Add examples to README and docs
@@ -249,7 +249,7 @@ Essential for real-time data streams (metrics, events) where recent values are m
 
 ---
 
-## Task 5: Implement OnBackpressureLatest Operator
+## ✅ Task 5: Implement OnBackpressureLatest Operator
 
 ### Priority
 

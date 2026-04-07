@@ -1303,6 +1303,54 @@ class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> onBackpressureLatest([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var channel = Channel.CreateBounded<T>(new BoundedChannelOptions(1)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var producerTask = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var item in this.WithCancellation(cts.Token))
+                {
+                    channel.Writer.TryWrite(item);
+                }
+                channel.Writer.Complete();
+            }
+            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+        }, cts.Token);
+
+        try
+        {
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            {
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                }
+            }
+
+            await producerTask;
+            await channel.Reader.Completion;
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            try { await producerTask; } catch { }
+        }
+    }
+
     async IAsyncEnumerable<T> doOnNext(Action<T> onNext, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var item in this.WithCancellation(cancellationToken))
@@ -1410,7 +1458,7 @@ class ConnectableStream<T> : IConnectableStream<T>
     /// <inheritdoc />
     public IStream<T> OnBackpressureLatest()
     {
-        throw new NotImplementedException();
+        return Streamix.Stream.From(onBackpressureLatest(), clock);
     }
 
     /// <inheritdoc />

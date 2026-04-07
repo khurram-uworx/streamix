@@ -97,4 +97,89 @@ public class BackpressureTests
         // Assert
         Assert.That(results, Is.EqualTo(Enumerable.Range(1, 10)));
     }
+
+    [Test]
+    public async Task OnBackpressureLatest_HappyPath_PreservesLatest()
+    {
+        // Arrange
+        var consumerReceivedFirstTcs = new TaskCompletionSource<bool>();
+
+        var stream = Stream.Create<int>(async (emitter, ct) =>
+        {
+            // Send first item, which should be received by consumer
+            await emitter.EmitAsync(1);
+
+            // Wait until consumer has received the first item and is "busy"
+            await consumerReceivedFirstTcs.Task;
+
+            // These should be dropped, except the last one (5)
+            await emitter.EmitAsync(2);
+            await emitter.EmitAsync(3);
+            await emitter.EmitAsync(4);
+            await emitter.EmitAsync(5);
+        }).OnBackpressureLatest();
+
+        // Act
+        var results = new List<int>();
+        await foreach (var item in stream)
+        {
+            results.Add(item);
+            if (results.Count == 1)
+            {
+                consumerReceivedFirstTcs.SetResult(true);
+                // Slow down consumer to force backpressure for subsequent items
+                await Task.Delay(100);
+            }
+        }
+
+        // Assert
+        // Item 1 is received, then 2, 3, 4 are dropped by the channel (DropOldest with capacity 1),
+        // leaving 5 as the latest available.
+        Assert.That(results, Is.EqualTo(new[] { 1, 5 }));
+    }
+
+    [Test]
+    public async Task OnBackpressureLatest_ConnectableStream_HappyPath()
+    {
+        // Arrange
+        var consumerReceivedFirstTcs = new TaskCompletionSource<bool>();
+
+        var connectable = Stream.Create<int>(async (emitter, ct) =>
+        {
+            // Send first item
+            await emitter.EmitAsync(1);
+
+            // Wait until consumer has received the first item
+            await consumerReceivedFirstTcs.Task;
+
+            // These should be dropped, except the last one (5)
+            await emitter.EmitAsync(2);
+            await emitter.EmitAsync(3);
+            await emitter.EmitAsync(4);
+            await emitter.EmitAsync(5);
+        }).Publish();
+
+        var stream = connectable.OnBackpressureLatest();
+
+        // Act
+        var results = new List<int>();
+        var resultsTask = Task.Run(async () =>
+        {
+            await foreach (var item in stream)
+            {
+                results.Add(item);
+                if (results.Count == 1)
+                {
+                    consumerReceivedFirstTcs.SetResult(true);
+                    await Task.Delay(100);
+                }
+            }
+        });
+
+        using var connection = connectable.Connect();
+        await resultsTask;
+
+        // Assert
+        Assert.That(results, Is.EqualTo(new[] { 1, 5 }));
+    }
 }
