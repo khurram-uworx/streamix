@@ -242,7 +242,7 @@ public class BackpressureTests
             {
                 results.Add(item);
                 // Slow down consumer to force drops in the OnBackpressureDrop operator
-                await Task.Delay(20);
+                await Task.Delay(50);
             }
         });
 
@@ -313,5 +313,93 @@ public class BackpressureTests
         });
 
         Assert.That(ex.Message, Does.Contain("Downstream cannot keep pace."));
+    }
+
+    [Test]
+    public async Task MultipleBackpressureOperators_LastOneWins()
+    {
+        // Arrange
+        // Buffer(1) would normally throw if more than 1 item is buffered.
+        // But Latest() is applied after, so it should handle the backpressure by dropping oldest.
+        var consumerReceivedFirstTcs = new TaskCompletionSource<bool>();
+        var stream = Stream.Create<int>(async (emitter, ct) =>
+        {
+            await emitter.EmitAsync(1);
+            await consumerReceivedFirstTcs.Task;
+            // Emit multiple items while consumer is blocked
+            await emitter.EmitAsync(2);
+            await emitter.EmitAsync(3);
+            await emitter.EmitAsync(4);
+        }).OnBackpressureBuffer(1).OnBackpressureLatest();
+
+        // Act
+        var results = new List<int>();
+        await foreach (var item in stream)
+        {
+            results.Add(item);
+            if (results.Count == 1)
+            {
+                consumerReceivedFirstTcs.SetResult(true);
+                // Slow down consumer to force backpressure in OnBackpressureLatest
+                await Task.Delay(200);
+            }
+        }
+
+        // Assert
+        // If Buffer(1) won, it would have thrown BackpressureException because 2 items (2, 3)
+        // would be buffered while consumer is at 1.
+        // Since Latest() was last, it should have dropped oldest items.
+        // Note: 1 is received, then 2, 3, 4 are emitted. Latest drops 2, 3 and keeps 4.
+        Assert.That(results, Is.EqualTo(new[] { 1, 4 }));
+    }
+
+    [Test]
+    [TestCase("Buffer")]
+    [TestCase("Drop")]
+    [TestCase("Latest")]
+    [TestCase("Error")]
+    public async Task BackpressureStrategies_EmptyStream_HandlesCorrectly(string strategy)
+    {
+        // Arrange
+        var source = Stream.Empty<int>();
+        var stream = strategy switch
+        {
+            "Buffer" => source.OnBackpressureBuffer(10),
+            "Drop" => source.OnBackpressureDrop(),
+            "Latest" => source.OnBackpressureLatest(),
+            "Error" => source.OnBackpressureError(),
+            _ => throw new ArgumentException()
+        };
+
+        // Act
+        var results = await stream.ToListAsync();
+
+        // Assert
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    [TestCase("Buffer")]
+    [TestCase("Drop")]
+    [TestCase("Latest")]
+    [TestCase("Error")]
+    public async Task BackpressureStrategies_SingleItemStream_HandlesCorrectly(string strategy)
+    {
+        // Arrange
+        var source = Stream.Just(1);
+        var stream = strategy switch
+        {
+            "Buffer" => source.OnBackpressureBuffer(10),
+            "Drop" => source.OnBackpressureDrop(),
+            "Latest" => source.OnBackpressureLatest(),
+            "Error" => source.OnBackpressureError(),
+            _ => throw new ArgumentException()
+        };
+
+        // Act
+        var results = await stream.ToListAsync();
+
+        // Assert
+        Assert.That(results, Is.EqualTo(new[] { 1 }));
     }
 }
