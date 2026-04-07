@@ -14,7 +14,7 @@ Reference: `docs/BACKPRESSURE.md`
 4. **✅ Task 4**: Implement `OnBackpressureDrop` operator
 5. **✅ Task 5**: Implement `OnBackpressureLatest` operator
 6. **✅ Task 6**: Implement `OnBackpressureError` operator
-7. **Task 7**: Add comprehensive tests for all strategies
+7. ✅ **Task 7**: Add comprehensive tests for all strategies
 8. **Task 8**: Add examples to README and docs
 
 ## Coordination Notes
@@ -305,7 +305,7 @@ Essential for state-like streams (UI updates, configuration changes) where only 
 
 ---
 
-## Task 6: Implement OnBackpressureError Operator
+## ✅ Task 6: Implement OnBackpressureError Operator
 
 ### Priority
 
@@ -361,7 +361,7 @@ Essential for strict scenarios where overflow indicates a design problem that mu
 
 ---
 
-## Task 7: Add Comprehensive Tests for Backpressure Strategies
+## ✅ Task 7: Add Comprehensive Tests for Backpressure Strategies
 
 ### Priority
 
