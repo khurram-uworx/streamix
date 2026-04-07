@@ -1347,6 +1347,30 @@ class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> OnBackpressureBuffer(int capacity)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public IStream<T> OnBackpressureDrop()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public IStream<T> OnBackpressureLatest()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
+    public IStream<T> OnBackpressureError()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <inheritdoc />
     public IStream<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
     {
         return Stream.From(retry(retryCount, backoffStrategy), clock);
