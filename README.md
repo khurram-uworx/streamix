@@ -427,6 +427,81 @@ The extensions project also supports `ISingle<T>` interop.
 
 ---
 
+## 🌐 ASP.NET Core Integration
+
+Streamix integrates seamlessly with ASP.NET Core for **Server-Sent Events**, **WebSocket streaming**, and **HTTP response streaming** via the `Streamix.AspNetCore` package.
+
+### Installation
+
+```bash
+dotnet add package Streamix.AspNetCore
+```
+
+### Server-Sent Events (SSE)
+
+```csharp
+using Streamix.AspNetCore;
+
+app.MapGet("/prices", async (HttpResponse response, CancellationToken ct) =>
+{
+    var priceStream = _priceService.GetPriceUpdates().Publish().RefCount();
+    await priceStream.ToSseAsync(response, ct);
+});
+```
+
+Or using `StreamResult<T>`:
+
+```csharp
+[HttpGet("prices")]
+public IActionResult GetPrices()
+{
+    var priceStream = _priceService.GetPriceUpdates().Publish().RefCount();
+    return new StreamResult<decimal>(priceStream);
+}
+```
+
+### WebSocket Streaming
+
+```csharp
+[HttpGet("ws-prices")]
+public async Task GetPricesWebSocket()
+{
+    if (HttpContext.WebSockets.IsWebSocketRequest)
+    {
+        using var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        var stream = _priceService.GetPriceUpdates();
+        await stream.ToWebSocketAsync(ws, HttpContext.RequestAborted);
+    }
+    else
+    {
+        HttpContext.Response.StatusCode = 400;
+    }
+}
+```
+
+### JSON Response Streaming
+
+Collect a stream as a JSON array:
+
+```csharp
+[HttpGet("orders")]
+public async Task GetOrders(int userId)
+{
+    var stream = _orderService.GetOrders(userId);
+    await stream.ToJsonResponseAsync(HttpContext.Response, HttpContext.RequestAborted);
+}
+```
+
+### Key Features
+
+✅ **Built-in backpressure** — respects client-side flow control automatically  
+✅ **Cancellation support** — cleans up gracefully when client disconnects  
+✅ **Hot stream compatible** — works with `.Publish().RefCount()`  
+✅ **Zero boilerplate** — one-line integration in controllers  
+✅ **Custom serialization** — override JSON serialization when needed  
+
+---
+
 ## 🧵 Execution
 
 * Runs on caller context by default
@@ -502,7 +577,6 @@ Streamix is designed for high-performance asynchronous streaming with the follow
 ## 🧭 Roadmap
 
 * Structured concurrency support
-* ASP.NET Core integration for reactive endpoints
 * Additional time-based operators
 * Source generators for optimized pipelines
 
