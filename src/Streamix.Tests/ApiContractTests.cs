@@ -19,6 +19,8 @@ public class ApiContractTests
         Assert.That(typeof(Stream).GetMethod("Empty"), Is.Not.Null);
         Assert.That(typeof(Stream).GetMethods().Any(m => m.Name == "From"), Is.True);
         Assert.That(typeof(Stream).GetMethod("FromEvent"), Is.Not.Null);
+        Assert.That(typeof(Stream).GetMethod("FromTimer", new[] { typeof(TimeSpan) }), Is.Not.Null);
+        Assert.That(typeof(Stream).GetMethods().Any(m => m.Name == "FromQueue"), Is.True);
         Assert.That(typeof(Stream).GetMethod("Merge"), Is.Not.Null);
         Assert.That(typeof(Stream).GetMethods().Any(m => m.Name == "Zip"), Is.True);
 

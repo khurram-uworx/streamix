@@ -120,6 +120,17 @@ public static class Stream
             await Task.Yield();
         }
 
+        public static async IAsyncEnumerable<T> FromQueue<T>(Queue<T> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            while (source.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return source.Dequeue();
+            }
+
+            await Task.Yield();
+        }
+
         public static async IAsyncEnumerable<T> DeferAsyncEnumerable<T>(Func<CancellationToken, IAsyncEnumerable<T>> factory, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var source = factory(cancellationToken);
@@ -378,6 +389,23 @@ public static class Stream
     public static IStream<long> Timer(TimeSpan dueTime, IClock clock) => From(AsyncEnumerable.Timer(dueTime, clock), clock);
 
     /// <summary>
+    /// Creates a stream from a timer source that emits a single 0L after an initial delay and then completes.
+    /// This is an adapter-style alias for <see cref="Timer(TimeSpan)"/>.
+    /// </summary>
+    /// <param name="dueTime">The delay before emitting the item.</param>
+    /// <returns>A stream that emits 0L after the delay.</returns>
+    public static IStream<long> FromTimer(TimeSpan dueTime) => Timer(dueTime);
+
+    /// <summary>
+    /// Creates a stream from a timer source using the provided clock.
+    /// This is an adapter-style alias for <see cref="Timer(TimeSpan, IClock)"/>.
+    /// </summary>
+    /// <param name="dueTime">The delay before emitting the item.</param>
+    /// <param name="clock">The clock used to schedule the delay.</param>
+    /// <returns>A stream that emits 0L after the delay.</returns>
+    public static IStream<long> FromTimer(TimeSpan dueTime, IClock clock) => Timer(dueTime, clock);
+
+    /// <summary>
     /// Returns a stream that emits the result of a polling function every specified time interval.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -422,6 +450,20 @@ public static class Stream
     /// <param name="channel">The channel to read from.</param>
     /// <returns>A stream that emits all items from the channel.</returns>
     public static IStream<T> FromChannel<T>(Channel<T> channel) => FromChannel(channel.Reader);
+
+    /// <summary>
+    /// Creates a stream that drains the current contents of a <see cref="Queue{T}"/>.
+    /// This adapter consumes the queue by dequeuing each available item and completes once the queue is empty.
+    /// For live asynchronous queue workloads, prefer <see cref="FromChannel{T}(ChannelReader{T})"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the queue.</typeparam>
+    /// <param name="queue">The queue to drain.</param>
+    /// <returns>A stream that emits the queue's current contents in dequeue order.</returns>
+    public static IStream<T> FromQueue<T>(Queue<T> queue)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        return From(AsyncEnumerable.FromQueue(queue));
+    }
 
     /// <summary>
     /// Merges multiple channel readers into a single stream.
