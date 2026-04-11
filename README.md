@@ -279,7 +279,7 @@ var latest = await prices.Take(2).ToListAsync();
 *   **Lifetime**: Each subscriber gets its own registration. Cancelling or disposing the subscription always disposes the returned registration.
 
 ### `Stream.FromTimer`
-Adapter-style alias for `Stream.Timer(...)` when you want the source shape to read like "from an external timer".
+Single delayed emission.
 ```csharp
 var stream = Stream.FromTimer(TimeSpan.FromSeconds(5));
 ```
@@ -322,13 +322,6 @@ Non-terminating stream primitive.
 var stream = Stream.Never<int>();
 ```
 *   **Semantics**: Never emits and never completes unless the subscriber cancels.
-
-### `Stream.Timer`
-Single delayed emission.
-```csharp
-var stream = Stream.Timer(TimeSpan.FromSeconds(5));
-```
-*   **Semantics**: Emits a single `0L` after the due time, then completes.
 
 ### `Stream.Poll`
 Periodic async polling.

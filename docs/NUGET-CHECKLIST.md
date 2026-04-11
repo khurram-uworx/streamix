@@ -1,25 +1,3 @@
-## ✅ First Release Scope
-
-The first usable release is intentionally focused on the core pull-based Streamix model:
-
-* `Stream<T>` and `Single<T>` over `IAsyncEnumerable<T>`
-* Core transformation, flattening, batching, resilience, and time-based operators documented above
-* Explicit concurrency, ordering, cancellation, and backpressure behavior
-* Hot-stream primitives: `Publish`, `Replay`, and `RefCount`
-* Terminal/materialization operators and sink/channel interop
-* Optional AsyncRx.NET interop in the separate `Streamix.Extensions` package
-
-Intentionally deferred from the first release:
-
-* Structured concurrency support
-* ASP.NET Core integration for reactive endpoints
-* Additional time-based operators beyond the currently documented set
-* Source generators for optimized pipelines
-
-If something is not listed above and not documented as shipped in this README, treat it as outside the first-release MVP rather than an accidentally missing feature.
-
----
-
 ## 📋 Release Checklist
 
 Before publishing a release:

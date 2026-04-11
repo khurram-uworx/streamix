@@ -166,7 +166,7 @@ public static class Stream
             }
         }
 
-        public static async IAsyncEnumerable<long> Timer(TimeSpan dueTime, IClock clock, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public static async IAsyncEnumerable<long> FromTimer(TimeSpan dueTime, IClock clock, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (dueTime < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(dueTime));
 
@@ -382,28 +382,11 @@ public static class Stream
     /// </summary>
     /// <param name="dueTime">The delay before emitting the item.</param>
     /// <returns>A stream that emits 0L after the delay.</returns>
-    public static IStream<long> Timer(TimeSpan dueTime) => From(AsyncEnumerable.Timer(dueTime, SystemClock.Instance));
+    public static IStream<long> FromTimer(TimeSpan dueTime) => From(AsyncEnumerable.FromTimer(dueTime, SystemClock.Instance));
 
     /// <summary>
     /// </summary>
-    public static IStream<long> Timer(TimeSpan dueTime, IClock clock) => From(AsyncEnumerable.Timer(dueTime, clock), clock);
-
-    /// <summary>
-    /// Creates a stream from a timer source that emits a single 0L after an initial delay and then completes.
-    /// This is an adapter-style alias for <see cref="Timer(TimeSpan)"/>.
-    /// </summary>
-    /// <param name="dueTime">The delay before emitting the item.</param>
-    /// <returns>A stream that emits 0L after the delay.</returns>
-    public static IStream<long> FromTimer(TimeSpan dueTime) => Timer(dueTime);
-
-    /// <summary>
-    /// Creates a stream from a timer source using the provided clock.
-    /// This is an adapter-style alias for <see cref="Timer(TimeSpan, IClock)"/>.
-    /// </summary>
-    /// <param name="dueTime">The delay before emitting the item.</param>
-    /// <param name="clock">The clock used to schedule the delay.</param>
-    /// <returns>A stream that emits 0L after the delay.</returns>
-    public static IStream<long> FromTimer(TimeSpan dueTime, IClock clock) => Timer(dueTime, clock);
+    public static IStream<long> FromTimer(TimeSpan dueTime, IClock clock) => From(AsyncEnumerable.FromTimer(dueTime, clock), clock);
 
     /// <summary>
     /// Returns a stream that emits the result of a polling function every specified time interval.

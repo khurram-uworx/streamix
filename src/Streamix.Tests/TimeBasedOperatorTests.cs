@@ -268,7 +268,7 @@ public class TimeBasedOperatorTests
     public async Task Timer_ShouldEmit_Single_Zero_After_DueTime()
     {
         var clock = new TestClock();
-        var timer = Stream.Timer(TimeSpan.FromSeconds(2), clock);
+        var timer = Stream.FromTimer(TimeSpan.FromSeconds(2), clock);
 
         var subscriber = new TestSubscriber<long>();
         var task = Task.Run(() => subscriber.RunAsync(timer, default));
@@ -287,7 +287,7 @@ public class TimeBasedOperatorTests
     public async Task Timer_With_Zero_DueTime_ShouldEmit_Immediately()
     {
         var clock = new TestClock();
-        var timer = Stream.Timer(TimeSpan.Zero, clock);
+        var timer = Stream.FromTimer(TimeSpan.Zero, clock);
 
         var subscriber = await TestSubscriber<long>.SubscribeAsync(timer);
 
@@ -299,7 +299,7 @@ public class TimeBasedOperatorTests
     public async Task Timer_ShouldRespectCancellation()
     {
         var clock = new TestClock();
-        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+        var timer = Stream.FromTimer(TimeSpan.FromSeconds(1), clock);
         using var cts = new CancellationTokenSource();
 
         var subscribeTask = TestSubscriber<long>.SubscribeAsync(timer, cts.Token);
@@ -317,7 +317,7 @@ public class TimeBasedOperatorTests
     {
         Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
         {
-            var timer = Stream.Timer(TimeSpan.FromSeconds(-1));
+            var timer = Stream.FromTimer(TimeSpan.FromSeconds(-1));
             await foreach (var item in timer) { }
         });
     }
@@ -326,7 +326,7 @@ public class TimeBasedOperatorTests
     public async Task Timer_ShouldBe_Cold_Per_Subscription()
     {
         var clock = new TestClock();
-        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+        var timer = Stream.FromTimer(TimeSpan.FromSeconds(1), clock);
 
         var first = new TestSubscriber<long>();
         var firstTask = Task.Run(() => first.RunAsync(timer, default));
@@ -564,7 +564,7 @@ public class TimeBasedOperatorTests
     public async Task Timer_ShouldEmitAfterDelayAndComplete()
     {
         var clock = new TestClock();
-        var timer = Stream.Timer(TimeSpan.FromSeconds(1), clock);
+        var timer = Stream.FromTimer(TimeSpan.FromSeconds(1), clock);
 
         var subscriber = new TestSubscriber<long>();
         var task = Task.Run(() => subscriber.RunAsync(timer, default));
