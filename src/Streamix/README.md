@@ -84,12 +84,12 @@ var shared = Stream.Range(1, 3)
 - `Map`, `MapAwait`, `MapOrdered`
 - `Filter`, `FilterAwait`
 - `FlatMap`, `FlatMapAwait`, `FlatMapOrdered`, `ConcatMap`
-- `Take`, `Skip`, `Merge`, `Zip`
+- `FromChannel`, `Take`, `Skip`, `Merge`, `MergeChannels`, `Zip`
 - `Buffer`, `Window`
-- `Timer`, `Interval`, `Poll`, `Never`
+- `FromTimer`, `Interval`, `Poll`, `Never`
 - `Retry`, `Timeout`, `OnErrorResume`, `OnErrorReturn`, `OnErrorMap`
 - `Publish`, `Replay`, `RefCount`
-- `ToListAsync`, `ToArrayAsync`, `CountAsync`, `FirstAsync`, `SingleAsync`
+- `ToListAsync`, `ToArrayAsync`, `CountAsync`, `FirstAsync`, `SingleAsync`, `SingleOrDefaultAsync`
 
 ## Learn More
 

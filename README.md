@@ -171,9 +171,9 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `ConcatMap` / `FlatMapOrdered`
 * `Generate`
 * `Take` / `Skip`
-* `Merge` / `Zip`
+* `Merge` / `MergeChannels` / `Zip`
 * `Buffer` / `Window`
-* `Never` / `Timer` / `Poll`
+* `Never` / `FromTimer` / `Poll`
 * `Throttle` / `Delay`
 * `Retry` / `Retry(..., backoffStrategy)` / `Timeout`
 * `OnErrorResume` / `OnErrorReturn` / `OnErrorMap`
@@ -187,7 +187,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 * `FirstAsync` / `LastAsync` (and `OrDefault` variants)
 * `ElementAtAsync` / `ElementAtOrDefaultAsync`
 * `ContainsAsync`
-* `SingleAsync` (and `OrDefault` variant)
+* `SingleAsync` / `SingleOrDefaultAsync`
 * `AggregateAsync` / `CountAsync` / `AnyAsync` / `AllAsync`
 * `MinAsync` / `MaxAsync`
 * `MinByAsync` / `MaxByAsync` (with comparer overloads)
@@ -284,6 +284,13 @@ Single delayed emission.
 var stream = Stream.FromTimer(TimeSpan.FromSeconds(5));
 ```
 *   **Semantics**: Emits a single `0L` after the due time, then completes.
+
+### `Stream.FromChannel<T>`
+Creates a stream from a `ChannelReader<T>`.
+```csharp
+var stream = Stream.FromChannel(channel.Reader);
+```
+*   **Semantics**: Drains the channel asynchronously and completes when the channel is closed.
 
 ### `Stream.FromQueue<T>`
 For draining the current contents of an in-memory `Queue<T>`.
@@ -384,7 +391,11 @@ using System.Threading.Channels;
 var channel = Channel.CreateUnbounded<int>();
 IStream<int> fromChannel = Stream.FromChannel(channel);
 
+// Terminal: Write to an existing channel
 await Stream.Range(1, 3).ToChannel(channel.Writer, completeWriter: true);
+
+// Extension: Return a new ChannelReader
+ChannelReader<int> reader = Stream.Range(1, 3).ToChannel(capacity: 10);
 ```
 
 Use `FromQueue(...)` when you need to drain an in-memory `Queue<T>` once. Use `FromChannel(...)` when you need a live async queue boundary with completion and backpressure semantics.
