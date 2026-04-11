@@ -282,6 +282,167 @@ public class StreamTests
     }
 
     [Test]
+    public async Task ToChannel_WithModeFail_PropagatesBackpressureException()
+    {
+        var reader = Stream.Range(1, 100).ToChannel(1, ChannelBackpressureMode.Fail);
+
+        Assert.That(await reader.ReadAsync(), Is.EqualTo(1));
+        Assert.ThrowsAsync<BackpressureException>(async () => await reader.Completion);
+    }
+
+    [Test]
+    public async Task ToChannel_WithLatestOnly_KeepsLatestPendingItem()
+    {
+        var receivedFirst = new TaskCompletionSource<bool>();
+        var producerFinished = new TaskCompletionSource<bool>();
+        var reader = Stream.Create<int>(async emitter =>
+        {
+            await emitter.EmitAsync(1);
+            await receivedFirst.Task;
+            await emitter.EmitAsync(2);
+            await emitter.EmitAsync(3);
+            await emitter.EmitAsync(4);
+            await emitter.EmitAsync(5);
+            producerFinished.SetResult(true);
+        }).ToChannel(8, ChannelBackpressureMode.LatestOnly);
+
+        var first = await reader.ReadAsync();
+        receivedFirst.SetResult(true);
+        await producerFinished.Task;
+        await Task.Delay(50);
+        var second = await reader.ReadAsync();
+
+        Assert.That(first, Is.EqualTo(1));
+        Assert.That(second, Is.EqualTo(5));
+        Assert.That(await reader.WaitToReadAsync(), Is.False);
+    }
+
+    [Test]
+    public async Task PipeThroughChannel_Fail_ThrowsWhenBoundaryIsFull()
+    {
+        var stream = Stream.Range(1, 100).PipeThroughChannel(1, ChannelBackpressureMode.Fail);
+
+        var ex = Assert.ThrowsAsync<BackpressureException>(async () =>
+        {
+            await foreach (var item in stream)
+            {
+                await Task.Delay(10);
+            }
+        });
+
+        Assert.That(ex?.Message, Does.Contain("Channel boundary is full"));
+    }
+
+    [Test]
+    public async Task PipeThroughChannel_LatestOnly_KeepsLatestPendingItem()
+    {
+        var consumerReceivedFirstTcs = new TaskCompletionSource<bool>();
+
+        var stream = Stream.Create<int>(async emitter =>
+        {
+            await emitter.EmitAsync(1);
+            await consumerReceivedFirstTcs.Task;
+            await emitter.EmitAsync(2);
+            await emitter.EmitAsync(3);
+            await emitter.EmitAsync(4);
+            await emitter.EmitAsync(5);
+        }).PipeThroughChannel(16, ChannelBackpressureMode.LatestOnly);
+
+        var results = new List<int>();
+        await foreach (var item in stream)
+        {
+            results.Add(item);
+            if (results.Count == 1)
+            {
+                consumerReceivedFirstTcs.SetResult(true);
+                await Task.Delay(100);
+            }
+        }
+
+        Assert.That(results, Is.EqualTo(new[] { 1, 5 }));
+    }
+
+    [Test]
+    public async Task RunOnChannel_PreservesOrdering()
+    {
+        var results = await Stream.Range(1, 50)
+            .RunOnChannel(capacity: 8, degreeOfParallelism: 4)
+            .ToListAsync();
+
+        Assert.That(results, Is.EqualTo(Enumerable.Range(1, 50)));
+    }
+
+    [Test]
+    public async Task Merge_ChannelReaders_Works()
+    {
+        var first = Channel.CreateUnbounded<int>();
+        var second = Channel.CreateUnbounded<int>();
+
+        await first.Writer.WriteAsync(1);
+        await first.Writer.WriteAsync(2);
+        first.Writer.Complete();
+
+        await second.Writer.WriteAsync(3);
+        await second.Writer.WriteAsync(4);
+        second.Writer.Complete();
+
+        var results = await Stream.MergeChannels(first.Reader, second.Reader).ToListAsync();
+
+        Assert.That(results.OrderBy(x => x), Is.EqualTo(new[] { 1, 2, 3, 4 }));
+    }
+
+    [Test]
+    public async Task TeeToChannel_WritesToSideChannel_AndPreservesMainStream()
+    {
+        var channel = Channel.CreateUnbounded<int>();
+
+        var result = await Stream.Range(1, 3)
+            .TeeToChannel(channel.Writer, completeWriter: true)
+            .ToListAsync();
+
+        var side = new List<int>();
+        await foreach (var item in channel.Reader.ReadAllAsync())
+        {
+            side.Add(item);
+        }
+
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(side, Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public async Task TeeToChannel_LeavesWriterOpen_ByDefault()
+    {
+        var channel = Channel.CreateUnbounded<int>();
+
+        var result = await Stream.Range(1, 3)
+            .TeeToChannel(channel.Writer)
+            .ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(channel.Reader.Completion.IsCompleted, Is.False);
+    }
+
+    [Test]
+    public async Task TeeToChannel_CompletesWriterWithError_WhenRequested()
+    {
+        async IAsyncEnumerable<int> Source()
+        {
+            yield return 1;
+            throw new InvalidOperationException("boom");
+        }
+
+        var channel = Channel.CreateUnbounded<int>();
+        var stream = Stream.From(Source()).TeeToChannel(channel.Writer, completeWriter: true);
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        Assert.That(ex?.Message, Is.EqualTo("boom"));
+        Assert.That(await channel.Reader.ReadAsync(), Is.EqualTo(1));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await channel.Reader.Completion);
+    }
+
+    [Test]
     public async Task From_IEnumerable_Emits_Correct_Values()
     {
         var items = new List<int> { 1, 2, 3, 4, 5 };

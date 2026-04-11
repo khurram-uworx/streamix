@@ -377,6 +377,49 @@ IStream<int> fromChannel = Stream.FromChannel(channel);
 await Stream.Range(1, 3).ToChannel(channel.Writer, completeWriter: true);
 ```
 
+For bounded channel deployment boundaries, Streamix now exposes explicit channel-native execution APIs:
+
+```csharp
+using System.Threading.Channels;
+
+var reader = Stream.Range(1, 100)
+    .ToChannel(capacity: 32, mode: ChannelBackpressureMode.Wait);
+
+var isolated = Stream.Range(1, 100)
+    .PipeThroughChannel(capacity: 64, mode: ChannelBackpressureMode.Fail);
+
+var workerBoundary = Stream.Range(1, 100)
+    .RunOnChannel(capacity: 64, degreeOfParallelism: 4);
+```
+
+Use channel-native backpressure modes when you need explicit boundary semantics around existing channel-heavy workloads:
+
+* `Wait` - pause the producer until space is available
+* `DropNewest` - evict the newest buffered item in favor of the incoming item
+* `DropOldest` - evict the oldest buffered item in favor of the incoming item
+* `LatestOnly` - keep only the latest pending item at the boundary
+* `Fail` - throw `BackpressureException` immediately when the boundary is full
+
+`PipeThroughChannel(...)` is the explicit execution boundary operator.
+`RunOnChannel(...)` adds the same boundary plus a worker-pool relay while preserving source order.
+`TeeToChannel(...)` mirrors items into an existing channel without turning the main pipeline into a terminal.
+
+You can also merge external channel ingress directly:
+
+```csharp
+var merged = Stream.MergeChannels(reader1, reader2, reader3);
+```
+
+For channel-backed batching boundaries, you can insert explicit channel semantics before grouping:
+
+```csharp
+var batches = Stream.Range(1, 10)
+    .Buffer(count: 3, capacity: 16, mode: ChannelBackpressureMode.Wait);
+
+var windows = Stream.Range(1, 10)
+    .Window(count: 3, capacity: 16, mode: ChannelBackpressureMode.Fail);
+```
+
 ### Sinks
 
 Streamix also exposes a small reusable sink abstraction for boundary writes:

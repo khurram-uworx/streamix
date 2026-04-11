@@ -41,8 +41,8 @@ public class ApiContractTests
         Assert.That(type.GetMethod("FlatMapManyAwait"), Is.Null);
         Assert.That(type.GetMethod("Take"), Is.Not.Null);
         Assert.That(type.GetMethod("Skip"), Is.Not.Null);
-        Assert.That(type.GetMethod("Buffer"), Is.Not.Null);
-        Assert.That(type.GetMethod("Window"), Is.Not.Null);
+        Assert.That(type.GetMethods().Any(m => m.Name == "Buffer"), Is.True);
+        Assert.That(type.GetMethods().Any(m => m.Name == "Window"), Is.True);
         Assert.That(type.GetMethod("Throttle"), Is.Not.Null);
         Assert.That(type.GetMethod("Delay"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "Retry"), Is.True);
@@ -52,6 +52,9 @@ public class ApiContractTests
         Assert.That(type.GetMethod("OnErrorMap"), Is.Not.Null);
         Assert.That(type.GetMethod("Publish"), Is.Not.Null);
         Assert.That(type.GetMethod("RunOn"), Is.Not.Null);
+        Assert.That(type.GetMethod("PipeThroughChannel"), Is.Not.Null);
+        Assert.That(type.GetMethod("RunOnChannel"), Is.Not.Null);
+        Assert.That(type.GetMethod("TeeToChannel"), Is.Not.Null);
         Assert.That(type.GetMethods().Any(m => m.Name == "ForEachAsync"), Is.True);
 
         // Terminal extensions (LINQ style)

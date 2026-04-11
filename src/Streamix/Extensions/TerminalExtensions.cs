@@ -1546,6 +1546,46 @@ public static class TerminalExtensions
     }
 
     /// <summary>
+    /// Terminal operation that writes all items of the stream to a new bounded <see cref="ChannelReader{T}"/>
+    /// using the specified channel backpressure policy.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="stream">The source stream.</param>
+    /// <param name="capacity">The channel capacity.</param>
+    /// <param name="mode">The backpressure policy used when the channel is full.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A channel reader that provides items from the stream.</returns>
+    public static ChannelReader<T> ToChannel<T>(this IStream<T> stream, int capacity, ChannelBackpressureMode mode, CancellationToken cancellationToken = default)
+    {
+        var channel = ChannelExecution.CreateChannel<T>(capacity, mode, singleWriter: true, singleReader: false);
+
+        _ = writeToChannelAsync();
+
+        return channel.Reader;
+
+        async Task writeToChannelAsync()
+        {
+            try
+            {
+                await foreach (var item in stream.WithCancellation(cancellationToken))
+                {
+                    await ChannelExecution.WriteAsync(channel.Writer, item, mode, cancellationToken);
+                }
+
+                channel.Writer.TryComplete();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+            }
+        }
+    }
+
+    /// <summary>
     /// Converts the stream into a blocking <see cref="IEnumerable{T}"/>.
     /// This should be used with caution as it blocks the calling thread.
     /// </summary>

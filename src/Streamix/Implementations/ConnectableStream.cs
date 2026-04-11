@@ -1456,6 +1456,58 @@ class ConnectableStream<T> : IConnectableStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> teeToChannel(ChannelWriter<T> writer, bool completeWriter, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Exception? completionError = null;
+        var canceled = false;
+        IAsyncEnumerator<T>? enumerator = null;
+
+        try
+        {
+            enumerator = this.GetAsyncEnumerator(cancellationToken);
+
+            while (true)
+            {
+                T item;
+
+                try
+                {
+                    if (!await enumerator.MoveNextAsync())
+                    {
+                        break;
+                    }
+
+                    item = enumerator.Current;
+                    await writer.WriteAsync(item, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    canceled = true;
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    completionError = ex;
+                    throw;
+                }
+
+                yield return item;
+            }
+        }
+        finally
+        {
+            if (enumerator != null)
+            {
+                await enumerator.DisposeAsync();
+            }
+
+            if (completeWriter && !canceled)
+            {
+                writer.TryComplete(completionError);
+            }
+        }
+    }
+
     async IAsyncEnumerable<T> doOnError(Action<Exception> onError, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         IAsyncEnumerator<T>? enumerator = null;
@@ -1764,9 +1816,23 @@ class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<IList<T>> Buffer(int count, int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+    {
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "Count must be greater than 0.");
+        return PipeThroughChannel(capacity, mode).Buffer(count);
+    }
+
+    /// <inheritdoc />
     public IStream<IStream<T>> Window(int count)
     {
         return Stream.From(window(count), clock);
+    }
+
+    /// <inheritdoc />
+    public IStream<IStream<T>> Window(int count, int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+    {
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "Count must be greater than 0.");
+        return PipeThroughChannel(capacity, mode).Window(count);
     }
 
     /// <inheritdoc />
@@ -1824,6 +1890,18 @@ class ConnectableStream<T> : IConnectableStream<T>
     }
 
     /// <inheritdoc />
+    public IStream<T> PipeThroughChannel(int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+    {
+        return Stream.From(ChannelExecution.PipeThroughChannel(this, capacity, mode), clock);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> RunOnChannel(int capacity, int degreeOfParallelism = 1, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+    {
+        return Stream.From(ChannelExecution.RunOnChannel(this, capacity, degreeOfParallelism, mode), clock);
+    }
+
+    /// <inheritdoc />
     public Task ForEachAsync(Action<T> action, CancellationToken cancellationToken = default)
     {
         return forEachAsync(action, cancellationToken);
@@ -1846,6 +1924,12 @@ class ConnectableStream<T> : IConnectableStream<T>
 
     /// <inheritdoc />
     public IStream<T> Tap(Action<T> onNext) => DoOnNext(onNext);
+
+    /// <inheritdoc />
+    public IStream<T> TeeToChannel(ChannelWriter<T> writer, bool completeWriter = false)
+    {
+        return Stream.From(teeToChannel(writer, completeWriter), clock);
+    }
 
     /// <inheritdoc />
     public IStream<T> DoOnError(Action<Exception> onError)

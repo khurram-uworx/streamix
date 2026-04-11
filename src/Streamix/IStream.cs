@@ -167,11 +167,29 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<IList<T>> Buffer(int count);
 
     /// <summary>
+    /// Groups elements of a stream into lists of a specified size after crossing a bounded channel-backed boundary.
+    /// </summary>
+    /// <param name="count">The maximum size of each buffer.</param>
+    /// <param name="capacity">The bounded channel capacity used by the buffering boundary.</param>
+    /// <param name="mode">The backpressure policy used when the boundary is full.</param>
+    /// <returns>An <see cref="IStream{T}"/> of <see cref="IList{T}"/>.</returns>
+    IStream<IList<T>> Buffer(int count, int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait);
+
+    /// <summary>
     /// Groups elements of a stream into windows of a specified size.
     /// </summary>
     /// <param name="count">The maximum size of each window.</param>
     /// <returns>An <see cref="IStream{T}"/> of <see cref="IStream{T}"/>.</returns>
     IStream<IStream<T>> Window(int count);
+
+    /// <summary>
+    /// Groups elements of a stream into windows of a specified size after crossing a bounded channel-backed boundary.
+    /// </summary>
+    /// <param name="count">The maximum size of each window.</param>
+    /// <param name="capacity">The bounded channel capacity used by the windowing boundary.</param>
+    /// <param name="mode">The backpressure policy used when the boundary is full.</param>
+    /// <returns>An <see cref="IStream{T}"/> of <see cref="IStream{T}"/>.</returns>
+    IStream<IStream<T>> Window(int count, int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait);
 
     /// <summary>
     /// Throttles a stream by emitting only the first element in each time interval.
@@ -281,6 +299,24 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> RunOn(TaskScheduler scheduler);
 
     /// <summary>
+    /// Inserts a bounded channel-backed execution boundary into the pipeline.
+    /// This decouples upstream production from downstream consumption using explicit channel semantics.
+    /// </summary>
+    /// <param name="capacity">The bounded channel capacity.</param>
+    /// <param name="mode">The backpressure policy used when the boundary is full.</param>
+    /// <returns>A stream that crosses an explicit channel boundary before continuing downstream.</returns>
+    IStream<T> PipeThroughChannel(int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait);
+
+    /// <summary>
+    /// Inserts a channel-backed execution boundary and relays items through a worker pool while preserving source ordering.
+    /// </summary>
+    /// <param name="capacity">The bounded channel capacity.</param>
+    /// <param name="degreeOfParallelism">The number of workers draining the channel-backed boundary.</param>
+    /// <param name="mode">The backpressure policy used when the boundary is full.</param>
+    /// <returns>A stream that runs across a channel-backed worker boundary.</returns>
+    IStream<T> RunOnChannel(int capacity, int degreeOfParallelism = 1, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait);
+
+    /// <summary>
     /// Terminal operation that executes an action for each element of the stream.
     /// </summary>
     /// <param name="action">The action to execute for each element.</param>
@@ -317,6 +353,14 @@ public interface IStream<T> : IAsyncEnumerable<T>
     /// <param name="onNext">The action to execute for each element.</param>
     /// <returns>The same stream.</returns>
     IStream<T> Tap(Action<T> onNext);
+
+    /// <summary>
+    /// Mirrors items into a channel writer while preserving the main stream.
+    /// </summary>
+    /// <param name="writer">The side-channel writer.</param>
+    /// <param name="completeWriter">Whether this operator owns writer completion.</param>
+    /// <returns>The original stream with side-channel writes applied.</returns>
+    IStream<T> TeeToChannel(ChannelWriter<T> writer, bool completeWriter = false);
 
     /// <summary>
     /// Executes an action when the stream fails.

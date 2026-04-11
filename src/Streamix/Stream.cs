@@ -424,6 +424,14 @@ public static class Stream
     public static IStream<T> FromChannel<T>(Channel<T> channel) => FromChannel(channel.Reader);
 
     /// <summary>
+    /// Merges multiple channel readers into a single stream.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the channels.</typeparam>
+    /// <param name="readers">The channel readers to merge.</param>
+    /// <returns>A merged stream.</returns>
+    public static IStream<T> MergeChannels<T>(params ChannelReader<T>[] readers) => Merge(readers.Select(FromChannel).ToArray());
+
+    /// <summary>
     /// Merges multiple streams into one by combining their elements.
     /// </summary>
     /// <typeparam name="T">The type of items in the streams.</typeparam>

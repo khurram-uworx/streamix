@@ -52,6 +52,33 @@ public class BatchOperatorTests
     }
 
     [Test]
+    public async Task Buffer_WithChannelBoundary_PreservesBatching()
+    {
+        var result = await Stream.Range(1, 5)
+            .Buffer(2, capacity: 8, mode: ChannelBackpressureMode.Wait)
+            .Map(list => string.Join(",", list))
+            .ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { "1,2", "3,4", "5" }));
+    }
+
+    [Test]
+    public async Task Buffer_WithChannelBoundary_Fail_ThrowsBackpressureException()
+    {
+        var stream = Stream.Range(1, 100).Buffer(5, capacity: 1, mode: ChannelBackpressureMode.Fail);
+
+        var ex = Assert.ThrowsAsync<BackpressureException>(async () =>
+        {
+            await foreach (var buffer in stream)
+            {
+                await Task.Delay(10);
+            }
+        });
+
+        Assert.That(ex?.Message, Does.Contain("Channel boundary is full"));
+    }
+
+    [Test]
     public async Task Window_Exact_Division()
     {
         var windows = await Stream.Range(1, 4).Window(2).ToListAsync();
@@ -98,5 +125,18 @@ public class BatchOperatorTests
         {
             await foreach (var _ in stream.WithCancellation(cts.Token)) { }
         });
+    }
+
+    [Test]
+    public async Task Window_WithChannelBoundary_PreservesWindowing()
+    {
+        var windows = await Stream.Range(1, 5)
+            .Window(2, capacity: 8, mode: ChannelBackpressureMode.Wait)
+            .ToListAsync();
+
+        Assert.That(windows.Count, Is.EqualTo(3));
+        Assert.That(await windows[0].ToListAsync(), Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(await windows[1].ToListAsync(), Is.EqualTo(new[] { 3, 4 }));
+        Assert.That(await windows[2].ToListAsync(), Is.EqualTo(new[] { 5 }));
     }
 }
