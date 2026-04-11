@@ -14,6 +14,19 @@ public sealed class TestClock : IClock
         now = startTime ?? new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
     }
 
+    public IReadOnlyList<TimeSpan> ScheduledDelays
+    {
+        get
+        {
+            lock (delays)
+            {
+                return delays
+                    .Select(d => d.Time - now)
+                    .ToList();
+            }
+        }
+    }
+
     public DateTimeOffset Now => now;
 
     public Task Delay(TimeSpan delay, CancellationToken cancellationToken = default)

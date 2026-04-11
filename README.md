@@ -278,6 +278,23 @@ var latest = await prices.Take(2).ToListAsync();
 *   **Backpressure**: When the source awaits the handler, `FromEvent(...)` preserves the same backpressure contract as `Create(...)`.
 *   **Lifetime**: Each subscriber gets its own registration. Cancelling or disposing the subscription always disposes the returned registration.
 
+### `Stream.FromTimer`
+Adapter-style alias for `Stream.Timer(...)` when you want the source shape to read like "from an external timer".
+```csharp
+var stream = Stream.FromTimer(TimeSpan.FromSeconds(5));
+```
+*   **Semantics**: Emits a single `0L` after the due time, then completes.
+
+### `Stream.FromQueue<T>`
+For draining the current contents of an in-memory `Queue<T>`.
+```csharp
+var queue = new Queue<int>(new[] { 1, 2, 3 });
+var stream = Stream.FromQueue(queue);
+```
+*   **Shape**: `FromQueue(...)` is a finite adapter over `Queue<T>`, not a live async subscription source.
+*   **Consumption**: It dequeues items in FIFO order and completes when the queue is empty.
+*   **Interop boundary**: For live asynchronous queue workloads, prefer `Stream.FromChannel(...)`.
+
 ### `Stream.Defer<T>` / `Single.Defer<T>`
 Lazy creation: the factory is called once per subscriber.
 ```csharp
@@ -376,6 +393,8 @@ IStream<int> fromChannel = Stream.FromChannel(channel);
 
 await Stream.Range(1, 3).ToChannel(channel.Writer, completeWriter: true);
 ```
+
+Use `FromQueue(...)` when you need to drain an in-memory `Queue<T>` once. Use `FromChannel(...)` when you need a live async queue boundary with completion and backpressure semantics.
 
 For bounded channel deployment boundaries, Streamix now exposes explicit channel-native execution APIs:
 

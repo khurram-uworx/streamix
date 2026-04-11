@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Streamix.Tests.Implementations;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -167,6 +168,32 @@ public class StreamTests
         var stream = Stream.FromChannel(channel);
 
         Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+    }
+
+    [Test]
+    public async Task FromQueue_Drains_Queue_In_Order()
+    {
+        var queue = new Queue<int>(new[] { 1, 2, 3 });
+
+        var stream = Stream.FromQueue(queue);
+        var result = await stream.ToListAsync();
+
+        Assert.That(result, Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(queue.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task FromQueue_Subsequent_Subscription_Sees_Remaining_Queue_State()
+    {
+        var queue = new Queue<int>(new[] { 10, 20 });
+        var stream = Stream.FromQueue(queue);
+
+        var first = await stream.Take(1).ToListAsync();
+        var second = await stream.ToListAsync();
+
+        Assert.That(first, Is.EqualTo(new[] { 10 }));
+        Assert.That(second, Is.EqualTo(new[] { 20 }));
+        Assert.That(queue.Count, Is.EqualTo(0));
     }
 
     [Test]
@@ -587,5 +614,30 @@ public class StreamTests
         var enumerator = stream2.GetAsyncEnumerator();
         Assert.That(await enumerator.MoveNextAsync(), Is.True);
         Assert.ThrowsAsync<InvalidOperationException>(async () => await enumerator.MoveNextAsync());
+    }
+
+    [Test]
+    public async Task FromTimer_Emits_Single_Zero_And_Completes()
+    {
+        var clock = new TestClock();
+        var stream = Stream.FromTimer(TimeSpan.FromSeconds(5), clock);
+        var subscriberTask = stream.ToListAsync();
+
+        Assert.That(clock.ScheduledDelays.Count, Is.EqualTo(1));
+        Assert.That(clock.ScheduledDelays[0], Is.EqualTo(TimeSpan.FromSeconds(5)));
+
+        clock.AdvanceBy(TimeSpan.FromSeconds(5));
+
+        var result = await subscriberTask;
+        Assert.That(result, Is.EqualTo(new[] { 0L }));
+    }
+
+    [Test]
+    public void FromTimer_Throws_On_Negative_DueTime()
+    {
+        var clock = new TestClock();
+
+        Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await Stream.FromTimer(TimeSpan.FromSeconds(-1), clock).ToListAsync());
     }
 }
