@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
 namespace Streamix.Implementations;
@@ -500,5 +501,44 @@ class Single<T> : ISingle<T>
     public ISingle<T> DoOnTerminate(Action onTerminate)
     {
         return new Single<T>(doOnTerminate(onTerminate), clock, name);
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Log() => Log(name ?? "");
+
+    /// <inheritdoc />
+    public ISingle<T> Log(string prefix) => LogActionInternal(s => Console.WriteLine(s), prefix);
+
+    /// <inheritdoc />
+    public ISingle<T> LogAction(Action<string> loggerAction) => LogActionInternal(loggerAction, name ?? "");
+
+    /// <inheritdoc />
+    public ISingle<T> Log(ILogger logger, string? prefix = null)
+    {
+        var p = prefix ?? name ?? "";
+        var pref = string.IsNullOrEmpty(p) ? "" : $"[{p}] ";
+        return DoOnNext(x => logger.LogInformation("{Prefix}Next({Value})", pref, x))
+              .DoOnError(ex => logger.LogError(ex, "{Prefix}Error({Message})", pref, ex.Message))
+              .DoOnComplete(() => logger.LogInformation("{Prefix}Completed", pref));
+    }
+
+    private ISingle<T> LogActionInternal(Action<string> logger, string prefix)
+    {
+        var pref = string.IsNullOrEmpty(prefix) ? "" : $"[{prefix}] ";
+        return DoOnNext(x => logger($"{pref}Next({x})"))
+              .DoOnError(ex => logger($"{pref}Error({ex.Message})"))
+              .DoOnComplete(() => logger($"{pref}Completed"));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Debug() => Debug(name ?? "");
+
+    /// <inheritdoc />
+    public ISingle<T> Debug(string prefix)
+    {
+        var pref = string.IsNullOrEmpty(prefix) ? "" : $"[{prefix}] ";
+        return DoOnNext(x => System.Diagnostics.Debug.WriteLine($"{pref}Next({x})"))
+              .DoOnError(ex => System.Diagnostics.Debug.WriteLine($"{pref}Error({ex.Message})"))
+              .DoOnComplete(() => System.Diagnostics.Debug.WriteLine($"{pref}Completed"));
     }
 }

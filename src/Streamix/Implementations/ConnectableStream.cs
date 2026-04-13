@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -1958,6 +1959,45 @@ class ConnectableStream<T> : IConnectableStream<T>
     public IStream<T> DoOnTerminate(Action onTerminate)
     {
         return Stream.From(doOnTerminate(onTerminate), clock, name);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Log() => Log(name ?? "");
+
+    /// <inheritdoc />
+    public IStream<T> Log(string prefix) => LogActionInternal(s => Console.WriteLine(s), prefix);
+
+    /// <inheritdoc />
+    public IStream<T> LogAction(Action<string> loggerAction) => LogActionInternal(loggerAction, name ?? "");
+
+    /// <inheritdoc />
+    public IStream<T> Log(ILogger logger, string? prefix = null)
+    {
+        var p = prefix ?? name ?? "";
+        var pref = string.IsNullOrEmpty(p) ? "" : $"[{p}] ";
+        return DoOnNext(x => logger.LogInformation("{Prefix}Next({Value})", pref, x))
+              .DoOnError(ex => logger.LogError(ex, "{Prefix}Error({Message})", pref, ex.Message))
+              .DoOnComplete(() => logger.LogInformation("{Prefix}Completed", pref));
+    }
+
+    private IStream<T> LogActionInternal(Action<string> logger, string prefix)
+    {
+        var pref = string.IsNullOrEmpty(prefix) ? "" : $"[{prefix}] ";
+        return DoOnNext(x => logger($"{pref}Next({x})"))
+              .DoOnError(ex => logger($"{pref}Error({ex.Message})"))
+              .DoOnComplete(() => logger($"{pref}Completed"));
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Debug() => Debug(name ?? "");
+
+    /// <inheritdoc />
+    public IStream<T> Debug(string prefix)
+    {
+        var pref = string.IsNullOrEmpty(prefix) ? "" : $"[{prefix}] ";
+        return DoOnNext(x => System.Diagnostics.Debug.WriteLine($"{pref}Next({x})"))
+              .DoOnError(ex => System.Diagnostics.Debug.WriteLine($"{pref}Error({ex.Message})"))
+              .DoOnComplete(() => System.Diagnostics.Debug.WriteLine($"{pref}Completed"));
     }
 
     /// <inheritdoc />

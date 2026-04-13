@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Moq;
 using NUnit.Framework;
 
 namespace Streamix.Tests;
@@ -230,5 +232,85 @@ public class DiagnosticOperatorTests
 
         Assert.ThrowsAsync<Exception>(async () => await single.ToTask());
         Assert.That(terminated, Is.True);
+    }
+
+    [Test]
+    public async Task Stream_Log_Action_LogsAllSignals()
+    {
+        var logs = new List<string>();
+        await Stream.Range(1, 2)
+            .Named("TestStream")
+            .LogAction(s => logs.Add(s))
+            .DrainAsync();
+
+        Assert.That(logs, Contains.Item("[TestStream] Next(1)"));
+        Assert.That(logs, Contains.Item("[TestStream] Next(2)"));
+        Assert.That(logs, Contains.Item("[TestStream] Completed"));
+    }
+
+    [Test]
+    public async Task Stream_Log_Action_Prefix_LogsAllSignals()
+    {
+        var logs = new List<string>();
+        await Stream.Range(1, 2)
+            .LogAction(s => logs.Add(s))
+            .DrainAsync();
+
+        Assert.That(logs, Contains.Item("Next(1)"));
+        Assert.That(logs, Contains.Item("Next(2)"));
+        Assert.That(logs, Contains.Item("Completed"));
+    }
+
+    [Test]
+    public void Stream_Log_Action_LogsError()
+    {
+        var logs = new List<string>();
+        var stream = Stream.Error<int>(new Exception("Fail"))
+            .Named("ErrorStream")
+            .LogAction(s => logs.Add(s));
+
+        Assert.ThrowsAsync<Exception>(async () => await stream.DrainAsync());
+        Assert.That(logs, Contains.Item("[ErrorStream] Error(Fail)"));
+    }
+
+    [Test]
+    public async Task Stream_Log_ILogger_LogsAllSignals()
+    {
+        var mockLogger = new Mock<ILogger>();
+        await Stream.Range(1, 1)
+            .Named("LoggerStream")
+            .Log(mockLogger.Object)
+            .DrainAsync();
+
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("[LoggerStream] Next(1)")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("[LoggerStream] Completed")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task Single_Log_Action_LogsAllSignals()
+    {
+        var logs = new List<string>();
+        await Single.From(42)
+            .Named("TestSingle")
+            .LogAction(s => logs.Add(s))
+            .ToTask();
+
+        Assert.That(logs, Contains.Item("[TestSingle] Next(42)"));
+        Assert.That(logs, Contains.Item("[TestSingle] Completed"));
     }
 }

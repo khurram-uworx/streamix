@@ -345,6 +345,49 @@ public interface IStream<T> : IAsyncEnumerable<T>
     Task ForEachAsync(Func<T, Task> action, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Logs items, errors, and completion of the stream to standard output.
+    /// Uses the stream name as a prefix if available.
+    /// </summary>
+    /// <returns>The same stream.</returns>
+    IStream<T> Log();
+
+    /// <summary>
+    /// Logs items, errors, and completion of the stream to standard output with a specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to use in logs.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Log(string prefix);
+
+    /// <summary>
+    /// Logs items, errors, and completion of the stream using a custom logging action.
+    /// </summary>
+    /// <param name="loggerAction">The action to use for logging.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> LogAction(Action<string> loggerAction);
+
+    /// <summary>
+    /// Logs items, errors, and completion of the stream using an <see cref="Microsoft.Extensions.Logging.ILogger"/>.
+    /// </summary>
+    /// <param name="logger">The logger to use.</param>
+    /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Log(Microsoft.Extensions.Logging.ILogger logger, string? prefix = null);
+
+    /// <summary>
+    /// Logs items, errors, and completion of the stream to debug output.
+    /// Uses the stream name as a prefix if available.
+    /// </summary>
+    /// <returns>The same stream.</returns>
+    IStream<T> Debug();
+
+    /// <summary>
+    /// Logs items, errors, and completion of the stream to debug output with a specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to use in logs.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Debug(string prefix);
+
+    /// <summary>
     /// Executes an action for each element of the stream without modifying it.
     /// This operator does not catch exceptions thrown by the action.
     /// </summary>

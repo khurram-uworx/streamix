@@ -12,7 +12,7 @@ Current state:
 ## Suggested Execution Order
 
 1. ✅ Task 1: Implement `Named` metadata tracking
-2. Task 2: Implement `Log` and `Debug` operators
+2. ✅ Task 2: Implement `Log` and `Debug` operators
 3. Task 3: Implement `Checkpoint` operator
 4. Task 4: Implement `Trace` operator
 5. Task 5: Add behavioral tests for DEVX operators
@@ -68,7 +68,7 @@ Issue #47 identifies `Named("...")` as a key for metrics, tracing, and logging. 
 - `src/Streamix/Implementations/Stream.cs`
 - `src/Streamix/Implementations/Single.cs`
 
-## Task 2: Implement `Log` and `Debug` Operators
+## ✅ Task 2: Implement `Log` and `Debug` Operators
 
 ### Priority
 

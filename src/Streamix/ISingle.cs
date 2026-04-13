@@ -151,6 +151,49 @@ public interface ISingle<T> : IAsyncEnumerable<T>
     ISingle<T> Timeout(TimeSpan interval);
 
     /// <summary>
+    /// Logs the item, error, and completion of the single-item stream to standard output.
+    /// Uses the stream name as a prefix if available.
+    /// </summary>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Log();
+
+    /// <summary>
+    /// Logs the item, error, and completion of the single-item stream to standard output with a specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to use in logs.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Log(string prefix);
+
+    /// <summary>
+    /// Logs the item, error, and completion of the single-item stream using a custom logging action.
+    /// </summary>
+    /// <param name="loggerAction">The action to use for logging.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> LogAction(Action<string> loggerAction);
+
+    /// <summary>
+    /// Logs the item, error, and completion of the single-item stream using an <see cref="Microsoft.Extensions.Logging.ILogger"/>.
+    /// </summary>
+    /// <param name="logger">The logger to use.</param>
+    /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Log(Microsoft.Extensions.Logging.ILogger logger, string? prefix = null);
+
+    /// <summary>
+    /// Logs the item, error, and completion of the single-item stream to debug output.
+    /// Uses the stream name as a prefix if available.
+    /// </summary>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Debug();
+
+    /// <summary>
+    /// Logs the item, error, and completion of the single-item stream to debug output with a specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to use in logs.</param>
+    /// <returns>The same single-item stream.</returns>
+    ISingle<T> Debug(string prefix);
+
+    /// <summary>
     /// Executes an action for the element of the stream without modifying it.
     /// This operator does not catch exceptions thrown by the action.
     /// </summary>
