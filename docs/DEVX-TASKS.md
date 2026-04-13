@@ -11,7 +11,7 @@ Current state:
 
 ## Suggested Execution Order
 
-1. Task 1: Implement `Named` metadata tracking
+1. ✅ Task 1: Implement `Named` metadata tracking
 2. Task 2: Implement `Log` and `Debug` operators
 3. Task 3: Implement `Checkpoint` operator
 4. Task 4: Implement `Trace` operator
@@ -30,7 +30,7 @@ Current state:
   - `src/Streamix/Implementations/Single.cs`
   - `src/Streamix.Tests/DiagnosticOperatorTests.cs`
 
-## Task 1: Implement `Named` Metadata Tracking
+## Task 1: Implement `Named` Metadata Tracking ✅
 
 ### Priority
 

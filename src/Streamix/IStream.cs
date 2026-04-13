@@ -9,6 +9,18 @@ namespace Streamix;
 public interface IStream<T> : IAsyncEnumerable<T>
 {
     /// <summary>
+    /// Gets the name of the stream, if any.
+    /// </summary>
+    string? Name { get; }
+
+    /// <summary>
+    /// Sets the name of the stream.
+    /// </summary>
+    /// <param name="name">The name to set.</param>
+    /// <returns>A new <see cref="IStream{T}"/> with the specified name.</returns>
+    IStream<T> Named(string name);
+
+    /// <summary>
     /// Projects each element of a stream into a new form using a synchronous selector function.
     /// This overload is sequential and preserves source ordering.
     /// </summary>

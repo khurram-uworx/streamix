@@ -9,6 +9,18 @@ namespace Streamix;
 public interface ISingle<T> : IAsyncEnumerable<T>
 {
     /// <summary>
+    /// Gets the name of the single-item stream, if any.
+    /// </summary>
+    string? Name { get; }
+
+    /// <summary>
+    /// Sets the name of the single-item stream.
+    /// </summary>
+    /// <param name="name">The name to set.</param>
+    /// <returns>A new <see cref="ISingle{T}"/> with the specified name.</returns>
+    ISingle<T> Named(string name);
+
+    /// <summary>
     /// Projects the element of a single-item stream into a new form using a synchronous selector function.
     /// </summary>
     /// <typeparam name="TResult">The type of the element in the resulting single-item stream.</typeparam>

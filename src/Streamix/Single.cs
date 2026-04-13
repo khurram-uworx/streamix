@@ -89,9 +89,27 @@ public static class Single
     public static ISingle<T> From<T>(IAsyncEnumerable<T> source) => new Single<T>(source);
 
     /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/> and name.
+    /// </summary>
+    /// <typeparam name="T">The type of item in the stream.</typeparam>
+    /// <param name="source">The source asynchronous enumerable.</param>
+    /// <param name="name">The name of the single-item stream.</param>
+    /// <returns>A single-item stream wrapping the source.</returns>
+    public static ISingle<T> From<T>(IAsyncEnumerable<T> source, string? name)
+    {
+        if (source is ISingle<T> single && single.Name == name) return single;
+        return new Single<T>(source, null, name);
+    }
+
+    /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/> with a specific clock.
     /// </summary>
     public static ISingle<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Single<T>(source, clock);
+
+    /// <summary>
+    /// Creates a <see cref="ISingle{T}"/> from an <see cref="IAsyncEnumerable{T}"/> with a specific clock and name.
+    /// </summary>
+    public static ISingle<T> From<T>(IAsyncEnumerable<T> source, IClock clock, string? name) => new Single<T>(source, clock, name);
 
     /// <summary>
     /// Creates a <see cref="ISingle{T}"/> from a single value.
