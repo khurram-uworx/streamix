@@ -349,4 +349,77 @@ public class DiagnosticOperatorTests
         Assert.That(logs.Any(l => l.Contains("[Checkpoint: SingleCheckpoint] Next(42)") && l.Contains("Total:")), Is.True);
         Assert.That(logs.Any(l => l.Contains("[Checkpoint: SingleCheckpoint] Completed") && l.Contains("Total:")), Is.True);
     }
+
+    [Test]
+    public async Task Stream_Trace_LogsAllLifecycleSignals()
+    {
+        var logs = new List<string>();
+        await Stream.Range(1, 2)
+            .Named("TraceStream")
+            .TraceAction(s => logs.Add(s))
+            .DrainAsync();
+
+        Assert.That(logs[0], Is.EqualTo("[TraceStream] Subscribe"));
+        Assert.That(logs[1], Is.EqualTo("[TraceStream] Request(1)"));
+        Assert.That(logs[2], Is.EqualTo("[TraceStream] Next(1)"));
+        Assert.That(logs[3], Is.EqualTo("[TraceStream] Request(1)"));
+        Assert.That(logs[4], Is.EqualTo("[TraceStream] Next(2)"));
+        Assert.That(logs[5], Is.EqualTo("[TraceStream] Request(1)"));
+        Assert.That(logs[6], Is.EqualTo("[TraceStream] Completed"));
+        Assert.That(logs[7], Is.EqualTo("[TraceStream] Dispose"));
+    }
+
+    [Test]
+    public void Stream_Trace_LogsErrorSignal()
+    {
+        var logs = new List<string>();
+        var stream = Stream.Error<int>(new Exception("TraceFail"))
+            .Named("ErrorTrace")
+            .TraceAction(s => logs.Add(s));
+
+        Assert.ThrowsAsync<Exception>(async () => await stream.DrainAsync());
+
+        Assert.That(logs, Contains.Item("[ErrorTrace] Subscribe"));
+        Assert.That(logs, Contains.Item("[ErrorTrace] Error(TraceFail)"));
+        Assert.That(logs, Contains.Item("[ErrorTrace] Dispose"));
+    }
+
+    [Test]
+    public async Task Single_Trace_LogsAllLifecycleSignals()
+    {
+        var logs = new List<string>();
+        await Single.From(42)
+            .Named("TraceSingle")
+            .TraceAction(s => logs.Add(s))
+            .ToTask();
+
+        Assert.That(logs, Contains.Item("[TraceSingle] Subscribe"));
+        Assert.That(logs, Contains.Item("[TraceSingle] Request(1)"));
+        Assert.That(logs, Contains.Item("[TraceSingle] Next(42)"));
+        Assert.That(logs, Contains.Item("[TraceSingle] Completed"));
+        Assert.That(logs, Contains.Item("[TraceSingle] Dispose"));
+    }
+
+    [Test]
+    public async Task Stream_Trace_LogsCancellation()
+    {
+        var logs = new List<string>();
+        using var cts = new CancellationTokenSource();
+        var stream = Stream.Interval(TimeSpan.FromMilliseconds(10))
+            .TraceAction(s => logs.Add(s));
+
+        var task = Task.Run(async () =>
+        {
+            await foreach (var item in stream.WithCancellation(cts.Token))
+            {
+                if (item == 2) cts.Cancel();
+            }
+        });
+
+        Assert.CatchAsync<OperationCanceledException>(async () => await task);
+
+        Assert.That(logs, Contains.Item("Subscribe"));
+        Assert.That(logs, Contains.Item("Cancelled"));
+        Assert.That(logs, Contains.Item("Dispose"));
+    }
 }

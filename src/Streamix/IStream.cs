@@ -404,6 +404,35 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Checkpoint(string checkpointName, Action<string> loggerAction);
 
     /// <summary>
+    /// Provides a comprehensive trace of every stream signal (Subscribe, Next, Error, Complete, Cancel, Dispose).
+    /// Uses the stream name as a prefix if available.
+    /// </summary>
+    /// <returns>The same stream.</returns>
+    IStream<T> Trace();
+
+    /// <summary>
+    /// Provides a comprehensive trace of every stream signal with a specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to use in traces.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Trace(string prefix);
+
+    /// <summary>
+    /// Provides a comprehensive trace of every stream signal using a custom logging action.
+    /// </summary>
+    /// <param name="loggerAction">The action to use for logging.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> TraceAction(Action<string> loggerAction);
+
+    /// <summary>
+    /// Provides a comprehensive trace of every stream signal using an <see cref="Microsoft.Extensions.Logging.ILogger"/>.
+    /// </summary>
+    /// <param name="logger">The logger to use.</param>
+    /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Trace(Microsoft.Extensions.Logging.ILogger logger, string? prefix = null);
+
+    /// <summary>
     /// Executes an action for each element of the stream without modifying it.
     /// This operator does not catch exceptions thrown by the action.
     /// </summary>

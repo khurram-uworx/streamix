@@ -1317,6 +1317,63 @@ class Stream<T> : IStream<T>
         }
     }
 
+    async IAsyncEnumerable<T> traceInternal(string prefix, Action<string> logger, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var pref = string.IsNullOrEmpty(prefix) ? "" : $"[{prefix}] ";
+        logger($"{pref}Subscribe");
+
+        IAsyncEnumerator<T>? enumerator = null;
+        try
+        {
+            try
+            {
+                enumerator = source.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger($"{pref}Error({ex.Message})");
+                throw;
+            }
+
+            while (true)
+            {
+                logger($"{pref}Request(1)");
+                T item;
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    logger($"{pref}Cancelled");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger($"{pref}Error({ex.Message})");
+                    throw;
+                }
+
+                if (!hasNext) break;
+                item = enumerator.Current;
+
+                logger($"{pref}Next({item})");
+                yield return item;
+            }
+
+            logger($"{pref}Completed");
+        }
+        finally
+        {
+            if (enumerator != null)
+            {
+                await enumerator.DisposeAsync();
+                logger($"{pref}Dispose");
+            }
+        }
+    }
+
     async IAsyncEnumerable<T> doOnTerminate(Action onTerminate, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         try
@@ -1572,6 +1629,27 @@ class Stream<T> : IStream<T>
     public IStream<T> Named(string name)
     {
         return new Stream<T>(source, clock, name);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Trace() => Trace(name ?? "");
+
+    /// <inheritdoc />
+    public IStream<T> Trace(string prefix) => TraceAction(s => Console.WriteLine(s), prefix);
+
+    /// <inheritdoc />
+    public IStream<T> TraceAction(Action<string> loggerAction) => TraceAction(loggerAction, name ?? "");
+
+    private IStream<T> TraceAction(Action<string> loggerAction, string prefix)
+    {
+        return Stream.From(traceInternal(prefix, loggerAction), clock, name);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Trace(ILogger logger, string? prefix = null)
+    {
+        var pref = prefix ?? name ?? "";
+        return TraceAction(s => logger.LogInformation(s), pref);
     }
 
     /// <inheritdoc />
