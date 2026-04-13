@@ -16,7 +16,7 @@ Current state:
 3. ✅ Task 3: Implement `Checkpoint` operator
 4. ✅ Task 4: Implement `Trace` operator
 5. ✅ Task 5: Add behavioral tests for DEVX operators
-6. Task 6: Update documentation and examples
+6. ✅ Task 6: Update documentation and examples
 
 ## Coordination Notes
 
