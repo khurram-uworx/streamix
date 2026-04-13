@@ -331,6 +331,69 @@ class Single<T> : ISingle<T>
         onComplete();
     }
 
+    async IAsyncEnumerable<T> checkpointInternal(string checkpointName, Action<string> logger, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var startTime = clock.Now;
+
+        IAsyncEnumerator<T>? enumerator = null;
+        try
+        {
+            try
+            {
+                enumerator = source.GetAsyncEnumerator(ct);
+            }
+            catch (Exception ex)
+            {
+                var errorTime = clock.Now;
+                var totalErrorElapsed = errorTime - startTime;
+                logger($"[Checkpoint: {checkpointName}] Error({ex.Message}) | Total: {totalErrorElapsed.TotalMilliseconds:F2}ms");
+                throw;
+            }
+
+            while (true)
+            {
+                T item;
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    var cancelTime = clock.Now;
+                    var totalCancelElapsed = cancelTime - startTime;
+                    logger($"[Checkpoint: {checkpointName}] Cancelled | Total: {totalCancelElapsed.TotalMilliseconds:F2}ms");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var errorTime = clock.Now;
+                    var totalErrorElapsed = errorTime - startTime;
+                    logger($"[Checkpoint: {checkpointName}] Error({ex.Message}) | Total: {totalErrorElapsed.TotalMilliseconds:F2}ms");
+                    throw;
+                }
+
+                if (!hasNext) break;
+                item = enumerator.Current;
+
+                var now = clock.Now;
+                var totalElapsed = now - startTime;
+
+                logger($"[Checkpoint: {checkpointName}] Next({item}) | Total: {totalElapsed.TotalMilliseconds:F2}ms");
+                yield return item;
+            }
+
+            var completeTime = clock.Now;
+            var totalCompleteElapsed = completeTime - startTime;
+            logger($"[Checkpoint: {checkpointName}] Completed | Total: {totalCompleteElapsed.TotalMilliseconds:F2}ms");
+        }
+        finally
+        {
+            if (enumerator != null)
+                await enumerator.DisposeAsync();
+        }
+    }
+
     internal IClock Clock => clock;
 
     /// <inheritdoc />
@@ -540,5 +603,17 @@ class Single<T> : ISingle<T>
         return DoOnNext(x => System.Diagnostics.Debug.WriteLine($"{pref}Next({x})"))
               .DoOnError(ex => System.Diagnostics.Debug.WriteLine($"{pref}Error({ex.Message})"))
               .DoOnComplete(() => System.Diagnostics.Debug.WriteLine($"{pref}Completed"));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Checkpoint(string checkpointName)
+    {
+        return Checkpoint(checkpointName, s => Console.WriteLine(s));
+    }
+
+    /// <inheritdoc />
+    public ISingle<T> Checkpoint(string checkpointName, Action<string> loggerAction)
+    {
+        return new Single<T>(checkpointInternal(checkpointName, loggerAction), clock, name);
     }
 }

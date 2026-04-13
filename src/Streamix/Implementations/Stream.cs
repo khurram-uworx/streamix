@@ -1338,6 +1338,72 @@ class Stream<T> : IStream<T>
         onComplete();
     }
 
+    async IAsyncEnumerable<T> checkpointInternal(string checkpointName, Action<string> logger, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var startTime = clock.Now;
+        var lastItemTime = startTime;
+
+        IAsyncEnumerator<T>? enumerator = null;
+        try
+        {
+            try
+            {
+                enumerator = source.GetAsyncEnumerator(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var errorTime = clock.Now;
+                var totalErrorElapsed = errorTime - startTime;
+                logger($"[Checkpoint: {checkpointName}] Error({ex.Message}) | Total: {totalErrorElapsed.TotalMilliseconds:F2}ms");
+                throw;
+            }
+
+            while (true)
+            {
+                T item;
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync();
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    var cancelTime = clock.Now;
+                    var totalCancelElapsed = cancelTime - startTime;
+                    logger($"[Checkpoint: {checkpointName}] Cancelled | Total: {totalCancelElapsed.TotalMilliseconds:F2}ms");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var errorTime = clock.Now;
+                    var totalErrorElapsed = errorTime - startTime;
+                    logger($"[Checkpoint: {checkpointName}] Error({ex.Message}) | Total: {totalErrorElapsed.TotalMilliseconds:F2}ms");
+                    throw;
+                }
+
+                if (!hasNext) break;
+                item = enumerator.Current;
+
+                var now = clock.Now;
+                var totalElapsed = now - startTime;
+                var sinceLastElapsed = now - lastItemTime;
+                lastItemTime = now;
+
+                logger($"[Checkpoint: {checkpointName}] Next({item}) | Total: {totalElapsed.TotalMilliseconds:F2}ms | Since last: {sinceLastElapsed.TotalMilliseconds:F2}ms");
+                yield return item;
+            }
+
+            var completeTime = clock.Now;
+            var totalCompleteElapsed = completeTime - startTime;
+            logger($"[Checkpoint: {checkpointName}] Completed | Total: {totalCompleteElapsed.TotalMilliseconds:F2}ms");
+        }
+        finally
+        {
+            if (enumerator != null)
+                await enumerator.DisposeAsync();
+        }
+    }
+
     static async IAsyncEnumerable<T> create(Func<IStreamEmitter<T>, Task> producer, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var channel = Channel.CreateBounded<T>(1);
@@ -1506,6 +1572,18 @@ class Stream<T> : IStream<T>
     public IStream<T> Named(string name)
     {
         return new Stream<T>(source, clock, name);
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Checkpoint(string checkpointName)
+    {
+        return Checkpoint(checkpointName, s => Console.WriteLine(s));
+    }
+
+    /// <inheritdoc />
+    public IStream<T> Checkpoint(string checkpointName, Action<string> loggerAction)
+    {
+        return Stream.From(checkpointInternal(checkpointName, loggerAction), clock, name);
     }
 
     /// <inheritdoc />

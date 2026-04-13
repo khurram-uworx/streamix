@@ -313,4 +313,40 @@ public class DiagnosticOperatorTests
         Assert.That(logs, Contains.Item("[TestSingle] Next(42)"));
         Assert.That(logs, Contains.Item("[TestSingle] Completed"));
     }
+
+    [Test]
+    public async Task Stream_Checkpoint_LogsTimingInformation()
+    {
+        var logs = new List<string>();
+        await Stream.Range(1, 2)
+            .Checkpoint("TestCheckpoint", s => logs.Add(s))
+            .DrainAsync();
+
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: TestCheckpoint] Next(1)") && l.Contains("Total:") && l.Contains("Since last:")), Is.True);
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: TestCheckpoint] Next(2)") && l.Contains("Total:") && l.Contains("Since last:")), Is.True);
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: TestCheckpoint] Completed") && l.Contains("Total:")), Is.True);
+    }
+
+    [Test]
+    public void Stream_Checkpoint_LogsErrorTiming()
+    {
+        var logs = new List<string>();
+        var stream = Stream.Error<int>(new Exception("Fail"))
+            .Checkpoint("ErrorCheckpoint", s => logs.Add(s));
+
+        Assert.ThrowsAsync<Exception>(async () => await stream.DrainAsync());
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: ErrorCheckpoint] Error(Fail)") && l.Contains("Total:")), Is.True);
+    }
+
+    [Test]
+    public async Task Single_Checkpoint_LogsTimingInformation()
+    {
+        var logs = new List<string>();
+        await Single.From(42)
+            .Checkpoint("SingleCheckpoint", s => logs.Add(s))
+            .ToTask();
+
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: SingleCheckpoint] Next(42)") && l.Contains("Total:")), Is.True);
+        Assert.That(logs.Any(l => l.Contains("[Checkpoint: SingleCheckpoint] Completed") && l.Contains("Total:")), Is.True);
+    }
 }

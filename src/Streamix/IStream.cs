@@ -388,6 +388,22 @@ public interface IStream<T> : IAsyncEnumerable<T>
     IStream<T> Debug(string prefix);
 
     /// <summary>
+    /// Tracks progress through a specific stage of the pipeline with timing information.
+    /// Logs when items pass through, including time since stream start and time since last item.
+    /// </summary>
+    /// <param name="checkpointName">The name of the checkpoint.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Checkpoint(string checkpointName);
+
+    /// <summary>
+    /// Tracks progress through a specific stage of the pipeline with timing information using a custom logging action.
+    /// </summary>
+    /// <param name="checkpointName">The name of the checkpoint.</param>
+    /// <param name="loggerAction">The action to use for logging.</param>
+    /// <returns>The same stream.</returns>
+    IStream<T> Checkpoint(string checkpointName, Action<string> loggerAction);
+
+    /// <summary>
     /// Executes an action for each element of the stream without modifying it.
     /// This operator does not catch exceptions thrown by the action.
     /// </summary>
