@@ -146,6 +146,7 @@ var replayed = Stream.Range(1, 3).Replay(2);
 - `OnErrorResume` / `OnErrorReturn` / `OnErrorMap`
 - `Publish` / `Replay` / `RefCount`
 - `RunOn`
+- `Named`, `Log`, `Debug`, `Checkpoint`, `Trace`
 - `DoOnNext`, `Do`, `Tap`, `DoOnError`, `DoOnComplete`, `DoOnTerminate`
 
 `IStream<T>` includes `ForEachAsync(...)`, sink output, and channel output. Additional terminal operators are available through extension methods:
@@ -494,6 +495,26 @@ Key features:
 - Hot stream compatible
 - Zero boilerplate
 - Custom serialization
+
+## Observability and Debugging
+
+Streamix provides several operators to help you observe and debug your reactive pipelines.
+
+- `Named(string name)`: Tags the stream with a name used by other diagnostic operators.
+- `Log()`: Logs items, errors, and completion to standard output. Uses the stream name as a prefix if available.
+- `Debug()`: Similar to `Log()` but outputs to `System.Diagnostics.Debug`.
+- `Checkpoint(string name)`: Tracks progress through a specific stage of the pipeline with timing information.
+- `Trace()`: Provides a comprehensive trace of every stream signal (`Subscribe`, `Next`, `Error`, `Complete`, `Cancel`, `Dispose`).
+
+```csharp
+await Stream.Range(1, 100)
+    .Named("Orders")
+    .Trace()
+    .Checkpoint("ProcessStart")
+    .Map(async x => await ProcessAsync(x), maxConcurrency: 5)
+    .Checkpoint("ProcessEnd")
+    .ForEachAsync(Console.WriteLine);
+```
 
 ## Execution
 

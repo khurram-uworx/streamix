@@ -27,6 +27,8 @@ The default mental model is simple:
 
 ```csharp
 await Stream.Range(1, 10)
+    .Named("MyStream")
+    .Log()
     .Filter(x => x % 2 == 0)
     .Map(x => x * 10)
     .ForEachAsync(Console.WriteLine);
