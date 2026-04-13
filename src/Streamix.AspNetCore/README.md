@@ -1,6 +1,8 @@
 # Streamix.AspNetCore
 
-Seamless integration between Streamix reactive streams and ASP.NET Core, enabling effortless Server-Sent Events (SSE), WebSocket streaming, and HTTP response streaming with built-in backpressure and cancellation support.
+ASP.NET Core streaming integration for Streamix.
+
+This package connects Streamix pipelines to Server-Sent Events (SSE), WebSocket streaming, and HTTP response streaming with backpressure-aware and cancellation-friendly behavior.
 
 ## Quick Start
 
@@ -30,69 +32,12 @@ The `StreamResult<T>` handles:
 - Cancellation (closes cleanly when client disconnects)
 - JSON serialization
 
-### Minimal APIs
-
-```csharp
-app.MapGet("/prices", (IPriceService svc, HttpResponse res, CancellationToken ct) =>
-    svc.GetPriceUpdates().ToSseAsync(res, ct)
-);
-```
-
-### WebSocket Streaming
-
-```csharp
-[HttpGet("ws-prices")]
-public async Task GetPricesWebSocket()
-{
-    if (HttpContext.WebSockets.IsWebSocketRequest)
-    {
-        using var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        var stream = priceService.GetPriceUpdates();
-        await stream.ToWebSocketAsync(ws, HttpContext.RequestAborted);
-    }
-    else
-    {
-        HttpContext.Response.StatusCode = 400;
-    }
-}
-```
-
-### JSON Response Streaming
-
-```csharp
-[HttpGet("orders/{userId}")]
-public async Task GetOrders(int userId)
-{
-    var stream = orderService.GetOrders(userId);
-    await stream.ToJsonResponseAsync(HttpContext.Response, HttpContext.RequestAborted);
-}
-```
-
 ## Extension Methods
 
 - **`ToSseAsync(response, ct)`** - Stream items as Server-Sent Events
 - **`ToWebSocketAsync(webSocket, ct)`** - Stream items to a WebSocket
 - **`ToWebSocketAsync(webSocket, serializer, ct)`** - Stream with custom serialization
 - **`ToJsonResponseAsync(response, ct)`** - Collect stream and write as JSON array
-
-## StreamResult<T>
-
-An `IActionResult` that automatically handles stream serialization as SSE. Supports custom content types and handlers for advanced scenarios.
-
-```csharp
-// Custom handler example
-var customHandler = async (stream, response, ct) =>
-{
-    response.ContentType = "text/plain";
-    await stream.ForEachAsync(async item =>
-    {
-        await response.WriteAsync($"{item}\n", ct);
-        await response.Body.FlushAsync(ct);
-    }, ct);
-};
-
-return new StreamResult<Order>(orders, "text/plain", customHandler);
-```
 
 ## Features
 
@@ -103,9 +48,20 @@ return new StreamResult<Order>(orders, "text/plain", customHandler);
 ✅ **Custom serialization** - Override JSON serialization when needed  
 ✅ **Multiple formats** - SSE, WebSocket, JSON arrays
 
+## More Shapes
+
+`StreamResult<T>` gives you an `IActionResult` wrapper for SSE endpoints, and the package also supports minimal APIs, direct WebSocket streaming, and JSON response streaming.
+
 ## When to Use
 
 - **Real-time updates** (prices, notifications, metrics) → SSE or WebSocket
 - **Large result sets** (reports, exports) → Streaming JSON
 - **Server-sent events** (live feeds) → `ToSseAsync`
 - **Bi-directional communication** → WebSocket
+
+## Learn More
+
+- Overview and package map: [README.md](https://github.com/khurram-uworx/streamix/blob/main/README.md)
+- Developer guide: [GETTING-STARTED.md](https://github.com/khurram-uworx/streamix/blob/main/GETTING-STARTED.md)
+- Architecture and design notes: [ARCHITECTURE.md](https://github.com/khurram-uworx/streamix/blob/main/ARCHITECTURE.md)
+- Repository: [github.com/khurram-uworx/streamix](https://github.com/khurram-uworx/streamix)

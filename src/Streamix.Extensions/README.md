@@ -1,6 +1,8 @@
 # Streamix.Extensions
 
-This package provides interoperability between Streamix and [AsyncRx.NET](https://github.com/dotnet/reactive).
+AsyncRx.NET interop for Streamix.
+
+This package provides the bridge between Streamix and [AsyncRx.NET](https://github.com/dotnet/reactive) without forcing the core `Streamix` package to depend on preview AsyncRx bits.
 
 ## Maturity and Dependency Isolation
 
@@ -8,8 +10,15 @@ As AsyncRx.NET (System.Reactive.Async) is still in **experimental preview/alpha*
 
 To prevent destabilizing the core Streamix package and to avoid forcing a dependency on a preview library, all AsyncRx-related functionality is isolated within this project.
 
-### Design Decisions
+## Design Decisions
 
-1.  **Separate Assembly**: Interop is provided in a separate assembly (`Streamix.Extensions.dll`) so that users only take the dependency if they explicitly need it.
-2.  **Extension-Based API**: Methods like `ToAsyncObservable()`, `ToStream()`, and `ToSingle()` are implemented as extension methods to maintain a clean separation from the core `IStream<T>` and `ISingle<T>` interfaces.
-3.  **Push-Pull Bridge**: The bridge uses `System.Threading.Channels` for efficient and backpressure-aware conversion between the pull-based `IAsyncEnumerable<T>` (used by Streamix) and the push-based `IAsyncObservable<T>` (used by AsyncRx.NET).
+1. **Separate Assembly**: Interop is provided in a separate assembly (`Streamix.Extensions.dll`) so that users only take the dependency if they explicitly need it.
+2. **Extension-Based API**: Methods like `ToAsyncObservable()`, `ToStream()`, and `ToSingle()` are implemented as extension methods to maintain a clean separation from the core `IStream<T>` and `ISingle<T>` interfaces.
+3. **Push-Pull Bridge**: The bridge uses `System.Threading.Channels` for efficient and backpressure-aware conversion between the pull-based `IAsyncEnumerable<T>` used by Streamix and the push-based `IAsyncObservable<T>` used by AsyncRx.NET.
+
+## Learn More
+
+- Overview and package map: [README.md](https://github.com/khurram-uworx/streamix/blob/main/README.md)
+- Developer guide: [GETTING-STARTED.md](https://github.com/khurram-uworx/streamix/blob/main/GETTING-STARTED.md)
+- Architecture and design notes: [ARCHITECTURE.md](https://github.com/khurram-uworx/streamix/blob/main/ARCHITECTURE.md)
+- Repository: [github.com/khurram-uworx/streamix](https://github.com/khurram-uworx/streamix)

@@ -1,8 +1,8 @@
 # Streamix
 
-Streamix is a lightweight, fluent, async-first streaming library for .NET.
+Idiomatic reactive streams for .NET.
 
-It brings a .NET-idiomatic reactive stream model on top of `IAsyncEnumerable<T>` with explicit support for async composition, concurrency, ordering, cancellation, and backpressure-aware operators.
+Streamix gives you a fluent, async-first stream model on top of `IAsyncEnumerable<T>` with explicit semantics for composition, concurrency, ordering, cancellation, and backpressure.
 
 ## Installation
 
@@ -10,7 +10,7 @@ It brings a .NET-idiomatic reactive stream model on top of `IAsyncEnumerable<T>`
 dotnet add package Streamix
 ```
 
-## Why Streamix?
+## What You Get
 
 - `Stream<T>` for 0..N values and `Single<T>` for 0..1 values
 - Fluent operators for filtering, mapping, flattening, timing, retries, and recovery
@@ -28,7 +28,7 @@ await Stream.Range(1, 10)
     .ForEachAsync(Console.WriteLine);
 ```
 
-## Async Composition
+## A Little More
 
 ```csharp
 var products =
@@ -37,63 +37,22 @@ var products =
     .Map(o => o.Product);             // Stream<string>
 ```
 
-Common patterns include:
+Common patterns:
 
-- `Map` / `MapAwait` for sequential ordered 1:1 transforms
-- `Map(Func<T, Task<TResult>>, maxConcurrency)` for concurrent unordered 1:1 transforms
-- `MapOrdered` for concurrent ordered 1:1 transforms
+- `Map` / `MapAwait` / `MapOrdered`
 - `Filter` / `FilterAwait`
-- `FlatMap` / `FlatMapAwait` for concurrent flattening
-- `ConcatMap` for sequential ordered flattening
-- `FlatMapOrdered` for concurrent ordered flattening
+- `FlatMap` / `FlatMapAwait` / `FlatMapOrdered` / `ConcatMap`
+- `Publish` / `Replay` / `RefCount`
+- `Retry` / `Timeout` / `OnErrorResume`
+- `ToListAsync`, `CountAsync`, `FirstAsync`, `SingleAsync`
 
-## Concurrency and Backpressure
-
-Streamix makes concurrency and ordering explicit:
-
-- `Map(Func<T, TResult>)` and `MapAwait(...)` are sequential and ordered
-- `Map(Func<T, Task<TResult>>, int maxConcurrency = int.MaxValue)` is concurrent and unordered
-- `MapOrdered(...)` is concurrent and ordered
-- `FlatMap(...)` is unordered concurrent flattening by default
-
-```csharp
-await stream
-    .Map(async x => await ProcessAsync(x), maxConcurrency: 5)
-    .ForEachAsync(Console.WriteLine);
-```
-
-Backpressure strategies are also available when you want explicit overflow handling:
-
-- `OnBackpressureBuffer(capacity)`
-- `OnBackpressureDrop()`
-- `OnBackpressureLatest()`
-- `OnBackpressureError()`
-
-## Hot Streams
-
-Streams are cold by default. Use hot-stream primitives when you want sharing:
-
-```csharp
-var shared = Stream.Range(1, 3)
-    .Publish()
-    .RefCount();
-```
-
-## Key Operators
-
-- `Map`, `MapAwait`, `MapOrdered`
-- `Filter`, `FilterAwait`
-- `FlatMap`, `FlatMapAwait`, `FlatMapOrdered`, `ConcatMap`
-- `FromChannel`, `Take`, `Skip`, `Merge`, `MergeChannels`, `Zip`
-- `Buffer`, `Window`
-- `FromTimer`, `Interval`, `Poll`, `Never`
-- `Retry`, `Timeout`, `OnErrorResume`, `OnErrorReturn`, `OnErrorMap`
-- `Publish`, `Replay`, `RefCount`
-- `ToListAsync`, `ToArrayAsync`, `CountAsync`, `FirstAsync`, `SingleAsync`, `SingleOrDefaultAsync`
+Streamix keeps concurrency, ordering, hot/cold behavior, and backpressure explicit instead of implicit.
 
 ## Learn More
 
-- Full documentation and API notes: [README.md](https://github.com/khurram-uworx/streamix/blob/main/README.md)
+- Overview and package map: [README.md](https://github.com/khurram-uworx/streamix/blob/main/README.md)
+- Developer guide: [GETTING-STARTED.md](https://github.com/khurram-uworx/streamix/blob/main/GETTING-STARTED.md)
+- Architecture and design notes: [ARCHITECTURE.md](https://github.com/khurram-uworx/streamix/blob/main/ARCHITECTURE.md)
 - Repository: [github.com/khurram-uworx/streamix](https://github.com/khurram-uworx/streamix)
 
 ## Status
