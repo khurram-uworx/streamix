@@ -221,6 +221,11 @@ public static class Stream
     public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new Stream<T>(source, clock);
 
     /// <summary>
+    /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>, <see cref="IClock"/> and name.
+    /// </summary>
+    public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock, string? name) => new Stream<T>(source, clock, name);
+
+    /// <summary>
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
@@ -230,6 +235,19 @@ public static class Stream
     {
         if (source is IStream<T> stream) return stream;
         return new Stream<T>(source);
+    }
+
+    /// <summary>
+    /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/> and name.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="source">The source asynchronous enumerable.</param>
+    /// <param name="name">The name of the stream.</param>
+    /// <returns>A stream wrapping the source.</returns>
+    public static IStream<T> From<T>(IAsyncEnumerable<T> source, string? name)
+    {
+        if (source is IStream<T> stream && stream.Name == name) return stream;
+        return new Stream<T>(source, null, name);
     }
 
     /// <summary>

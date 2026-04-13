@@ -11,11 +11,13 @@ class Single<T> : ISingle<T>
 {
     readonly IAsyncEnumerable<T> source;
     readonly IClock clock;
+    readonly string? name;
 
-    internal Single(IAsyncEnumerable<T> source, IClock? clock = null)
+    internal Single(IAsyncEnumerable<T> source, IClock? clock = null, string? name = null)
     {
         this.source = source;
         this.clock = clock ?? SystemClock.Instance;
+        this.name = name;
     }
 
     async IAsyncEnumerable<TResult> map<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken ct = default)
@@ -331,6 +333,15 @@ class Single<T> : ISingle<T>
     internal IClock Clock => clock;
 
     /// <inheritdoc />
+    public string? Name => name;
+
+    /// <inheritdoc />
+    public ISingle<T> Named(string name)
+    {
+        return new Single<T>(source, clock, name);
+    }
+
+    /// <inheritdoc />
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         return Single.EnforceAtMostOne(source, cancellationToken).GetAsyncEnumerator(cancellationToken);
@@ -339,25 +350,25 @@ class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
     {
-        return Single.From(retry(retryCount, backoffStrategy), clock);
+        return Single.From(retry(retryCount, backoffStrategy), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<TResult> MapAwait<TResult>(Func<T, ValueTask<TResult>> selector)
     {
-        return new Single<TResult>(mapAwait(selector));
+        return new Single<TResult>(mapAwait(selector), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<TResult> Map<TResult>(Func<T, TResult> selector)
     {
-        return new Single<TResult>(map(selector));
+        return new Single<TResult>(map(selector), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector)
     {
-        return new Single<TResult>(flatMapAwait(selector));
+        return new Single<TResult>(flatMapAwait(selector), clock, name);
     }
 
     /// <inheritdoc />
@@ -366,31 +377,31 @@ class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<TResult> FlatMap<TResult>(Func<T, ISingle<TResult>> selector)
     {
-        return new Single<TResult>(flatMap(selector));
+        return new Single<TResult>(flatMap(selector), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMap<TResult>(Func<T, IStream<TResult>> selector)
     {
-        return Streamix.Stream.From(concatMapInternal(selector));
+        return Streamix.Stream.From(concatMapInternal(selector), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<IStream<TResult>>> selector)
     {
-        return Streamix.Stream.From(concatMapAwaitInternal(selector));
+        return Streamix.Stream.From(concatMapAwaitInternal(selector), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> OnErrorResume(Func<Exception, ISingle<T>> errorHandler)
     {
-        return new Single<T>(onErrorResume(errorHandler));
+        return new Single<T>(onErrorResume(errorHandler), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> OnErrorReturn(T value)
     {
-        return OnErrorResume(_ => Single.From(value));
+        return OnErrorResume(_ => Single.Just<T>(value).Named(name ?? ""));
     }
 
     /// <inheritdoc />
@@ -402,7 +413,7 @@ class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<T> RunOn(TaskScheduler scheduler)
     {
-        return new Single<T>(runOn(scheduler), clock);
+        return new Single<T>(runOn(scheduler), clock, name);
     }
 
     /// <inheritdoc />
@@ -452,19 +463,19 @@ class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<T> Retry(int retryCount = 1)
     {
-        return Single.From(retry(retryCount), clock);
+        return Single.From(retry(retryCount), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> Timeout(TimeSpan interval)
     {
-        return Single.From(timeout(interval), clock);
+        return Single.From(timeout(interval), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> DoOnNext(Action<T> onNext)
     {
-        return new Single<T>(doOnNext(onNext), clock);
+        return new Single<T>(doOnNext(onNext), clock, name);
     }
 
     /// <inheritdoc />
@@ -476,18 +487,18 @@ class Single<T> : ISingle<T>
     /// <inheritdoc />
     public ISingle<T> DoOnError(Action<Exception> onError)
     {
-        return new Single<T>(doOnError(onError), clock);
+        return new Single<T>(doOnError(onError), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> DoOnComplete(Action onComplete)
     {
-        return new Single<T>(doOnComplete(onComplete), clock);
+        return new Single<T>(doOnComplete(onComplete), clock, name);
     }
 
     /// <inheritdoc />
     public ISingle<T> DoOnTerminate(Action onTerminate)
     {
-        return new Single<T>(doOnTerminate(onTerminate), clock);
+        return new Single<T>(doOnTerminate(onTerminate), clock, name);
     }
 }

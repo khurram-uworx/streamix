@@ -72,11 +72,13 @@ class Stream<T> : IStream<T>
 
     readonly IAsyncEnumerable<T> source;
     readonly IClock clock;
+    readonly string? name;
 
-    internal Stream(IAsyncEnumerable<T> source, IClock? clock = null)
+    internal Stream(IAsyncEnumerable<T> source, IClock? clock = null, string? name = null)
     {
         this.source = source;
         this.clock = clock ?? SystemClock.Instance;
+        this.name = name;
     }
 
     async IAsyncEnumerable<TResult> map<TResult>(Func<T, TResult> selector, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -1497,6 +1499,15 @@ class Stream<T> : IStream<T>
     internal IClock Clock => clock;
 
     /// <inheritdoc />
+    public string? Name => name;
+
+    /// <inheritdoc />
+    public IStream<T> Named(string name)
+    {
+        return new Stream<T>(source, clock, name);
+    }
+
+    /// <inheritdoc />
     public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         return source.GetAsyncEnumerator(cancellationToken);
@@ -1506,49 +1517,49 @@ class Stream<T> : IStream<T>
     public IStream<T> OnBackpressureBuffer(int capacity)
     {
         if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than 0.");
-        return Streamix.Stream.From(onBackpressureBuffer(capacity), clock);
+        return Streamix.Stream.From(onBackpressureBuffer(capacity), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> OnBackpressureDrop()
     {
-        return Streamix.Stream.From(onBackpressureDrop(), clock);
+        return Streamix.Stream.From(onBackpressureDrop(), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> OnBackpressureLatest()
     {
-        return Streamix.Stream.From(onBackpressureLatest(), clock);
+        return Streamix.Stream.From(onBackpressureLatest(), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> OnBackpressureError()
     {
-        return Streamix.Stream.From(onBackpressureError(), clock);
+        return Streamix.Stream.From(onBackpressureError(), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Retry(int retryCount, Func<int, Exception, TimeSpan> backoffStrategy)
     {
-        return Stream.From(retry(retryCount, backoffStrategy), clock);
+        return Stream.From(retry(retryCount, backoffStrategy), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> MapAwait<TResult>(Func<T, ValueTask<TResult>> selector)
     {
-        return Stream.From(mapAwait(selector));
+        return Stream.From(mapAwait(selector), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> Map<TResult>(Func<T, TResult> selector)
     {
-        return Stream.From(map(selector));
+        return Stream.From(map(selector), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> FilterAwait(Func<T, ValueTask<bool>> predicate)
     {
-        return Stream.From(filterAwait(predicate));
+        return Stream.From(filterAwait(predicate), clock, name);
     }
 
     /// <inheritdoc />
@@ -1557,28 +1568,28 @@ class Stream<T> : IStream<T>
     /// <inheritdoc />
     public IStream<T> Filter(Func<T, bool> predicate)
     {
-        return Stream.From(filter(predicate));
+        return Stream.From(filter(predicate), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMapAwait<TResult>(Func<T, ValueTask<ISingle<TResult>>> selector, int maxConcurrency = int.MaxValue)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(flatMapAwaitConcurrent(selector, maxConcurrency));
+        return Stream.From(flatMapAwaitConcurrent(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> Map<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = int.MaxValue)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(parallelMapTask(selector, maxConcurrency));
+        return Stream.From(parallelMapTask(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> MapOrdered<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(parallelMapTaskOrdered(selector, maxConcurrency));
+        return Stream.From(parallelMapTaskOrdered(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
@@ -1589,15 +1600,15 @@ class Stream<T> : IStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         return maxConcurrency == 1
-            ? Stream.From(flatMap(selector))
-            : Stream.From(parallelMapEnumerable(selector, maxConcurrency));
+            ? Stream.From(flatMap(selector), clock, name)
+            : Stream.From(parallelMapEnumerable(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> FlatMap<TResult>(Func<T, Task<TResult>> selector, int maxConcurrency = int.MaxValue)
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Stream.From(parallelMapTask(selector, maxConcurrency));
+        return Stream.From(parallelMapTask(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
@@ -1608,14 +1619,14 @@ class Stream<T> : IStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         return maxConcurrency == 1
-            ? Stream.From(concatMapInternal(selector))
-            : Stream.From(parallelMapEnumerable(selector, maxConcurrency));
+            ? Stream.From(concatMapInternal(selector), clock, name)
+            : Stream.From(parallelMapEnumerable(selector, maxConcurrency), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<TResult> ConcatMap<TResult>(Func<T, IStream<TResult>> selector)
     {
-        return Stream.From(concatMapInternal(selector));
+        return Stream.From(concatMapInternal(selector), clock, name);
     }
 
     /// <inheritdoc />
@@ -1623,19 +1634,19 @@ class Stream<T> : IStream<T>
     {
         if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
         if (maxBufferedItemsPerInner <= 0) throw new ArgumentOutOfRangeException(nameof(maxBufferedItemsPerInner), "Max buffered items per inner must be greater than 0.");
-        return Stream.From(flatMapOrdered(selector, maxConcurrency, maxBufferedItemsPerInner));
+        return Stream.From(flatMapOrdered(selector, maxConcurrency, maxBufferedItemsPerInner), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Take(int count)
     {
-        return Stream.From(take(count));
+        return Stream.From(take(count), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Skip(int count)
     {
-        return Stream.From(skip(count));
+        return Stream.From(skip(count), clock, name);
     }
 
     /// <summary>
@@ -1689,20 +1700,20 @@ class Stream<T> : IStream<T>
         var all = new IStream<T>[others.Length + 1];
         all[0] = this;
         others.CopyTo(all, 1);
-        return Merge(all);
+        return Merge(all).Named(name ?? "");
     }
 
     /// <inheritdoc />
     public IStream<TResult> ZipWith<TOther, TResult>(IStream<TOther> other, Func<T, TOther, TResult> resultSelector)
     {
-        return Zip(this, other, resultSelector);
+        return Zip(this, other, resultSelector).Named(name ?? "");
     }
 
     /// <inheritdoc />
     public IStream<IList<T>> Buffer(int count)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "Count must be greater than 0.");
-        return Stream.From(buffer(count));
+        return Stream.From(buffer(count), clock, name);
     }
 
     /// <inheritdoc />
@@ -1716,7 +1727,7 @@ class Stream<T> : IStream<T>
     public IStream<IStream<T>> Window(int count)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "Count must be greater than 0.");
-        return Stream.From(window(count));
+        return Stream.From(window(count), clock, name);
     }
 
     /// <inheritdoc />
@@ -1729,43 +1740,43 @@ class Stream<T> : IStream<T>
     /// <inheritdoc />
     public IStream<T> Throttle(TimeSpan interval)
     {
-        return Stream.From(throttle(interval), clock);
+        return Stream.From(throttle(interval), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Delay(TimeSpan interval)
     {
-        return Stream.From<T>(delay(interval), clock);
+        return Stream.From<T>(delay(interval), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Retry(int retryCount = 1)
     {
-        return Stream.From(retry(retryCount), clock);
+        return Stream.From(retry(retryCount), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> Timeout(TimeSpan interval)
     {
-        return Stream.From(timeout(interval), clock);
+        return Stream.From(timeout(interval), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorResume(Func<Exception, IStream<T>> errorHandler)
     {
-        return Stream.From(onErrorResume(errorHandler));
+        return Stream.From(onErrorResume(errorHandler), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorReturn(T value)
     {
-        return OnErrorResume(_ => Streamix.Stream.From(value));
+        return OnErrorResume(_ => Streamix.Stream.Just<T>(value).Named(name ?? ""));
     }
 
     /// <inheritdoc />
     public IStream<T> OnErrorMap(Func<Exception, Exception> mapper)
     {
-        return OnErrorResume(ex => Stream.Error<T>(mapper(ex)));
+        return OnErrorResume(ex => Streamix.Stream.Error<T>(mapper(ex)).Named(name ?? ""));
     }
 
     /// <inheritdoc />
@@ -1777,19 +1788,19 @@ class Stream<T> : IStream<T>
     /// <inheritdoc />
     public IStream<T> RunOn(TaskScheduler scheduler)
     {
-        return Stream.From(runOn(scheduler), clock);
+        return Stream.From(runOn(scheduler), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> PipeThroughChannel(int capacity, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
     {
-        return Stream.From(ChannelExecution.PipeThroughChannel(this, capacity, mode), clock);
+        return Stream.From(ChannelExecution.PipeThroughChannel(this, capacity, mode), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> RunOnChannel(int capacity, int degreeOfParallelism = 1, ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
     {
-        return Stream.From(ChannelExecution.RunOnChannel(this, capacity, degreeOfParallelism, mode), clock);
+        return Stream.From(ChannelExecution.RunOnChannel(this, capacity, degreeOfParallelism, mode), clock, name);
     }
 
     /// <inheritdoc />
@@ -1809,7 +1820,7 @@ class Stream<T> : IStream<T>
     /// <inheritdoc />
     public IStream<T> DoOnNext(Action<T> onNext)
     {
-        return Stream.From(doOnNext(onNext), clock);
+        return Stream.From(doOnNext(onNext), clock, name);
     }
 
     /// <inheritdoc />
@@ -1821,25 +1832,25 @@ class Stream<T> : IStream<T>
     /// <inheritdoc />
     public IStream<T> TeeToChannel(ChannelWriter<T> writer, bool completeWriter = false)
     {
-        return Stream.From(teeToChannel(writer, completeWriter), clock);
+        return Stream.From(teeToChannel(writer, completeWriter), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> DoOnError(Action<Exception> onError)
     {
-        return Stream.From(doOnError(onError), clock);
+        return Stream.From(doOnError(onError), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> DoOnComplete(Action onComplete)
     {
-        return Stream.From(doOnComplete(onComplete), clock);
+        return Stream.From(doOnComplete(onComplete), clock, name);
     }
 
     /// <inheritdoc />
     public IStream<T> DoOnTerminate(Action onTerminate)
     {
-        return Stream.From(doOnTerminate(onTerminate), clock);
+        return Stream.From(doOnTerminate(onTerminate), clock, name);
     }
 
     /// <inheritdoc />
