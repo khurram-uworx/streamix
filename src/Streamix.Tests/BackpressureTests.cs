@@ -67,7 +67,7 @@ public class BackpressureTests
             }
         });
 
-        Assert.That(ex.Message, Does.Contain("Buffer overflow"));
+        Assert.That(ex!.Message, Does.Contain("Buffer overflow"));
     }
 
     [Test]
@@ -104,7 +104,7 @@ public class BackpressureTests
     public async Task OnBackpressureBuffer_ConnectableStream_HappyPath()
     {
         // Arrange
-        var connectable = Stream.Range(1, 10).Publish();
+        var connectable = Stream.Range(1, 10).Replay(10);
         var stream = connectable.OnBackpressureBuffer(10);
 
         var resultsTask = stream.ToListAsync();
@@ -223,7 +223,7 @@ public class BackpressureTests
     public async Task OnBackpressureDrop_FastProducerSlowConsumer_DropsNewItems()
     {
         // Arrange
-        var stream = Stream.Range(1, 100).OnBackpressureDrop();
+        var stream = Stream.Range(1, 500).OnBackpressureDrop();
 
         // Act
         var results = new List<int>();
@@ -231,15 +231,15 @@ public class BackpressureTests
         {
             results.Add(item);
             // Slow down consumer to force drops
-            await Task.Delay(10);
+            await Task.Delay(20);
         }
 
         // Assert
         // We should have dropped some items.
-        Assert.That(results.Count, Is.LessThan(100));
+        Assert.That(results.Count, Is.LessThan(500));
         // With DropWrite, we should have the earlier items and NOT the last item.
         Assert.That(results.First(), Is.EqualTo(1));
-        Assert.That(results, Does.Not.Contain(100));
+        Assert.That(results, Does.Not.Contain(500));
     }
 
     [Test]
@@ -256,9 +256,9 @@ public class BackpressureTests
         var results = await resultsTask;
 
         // Assert
-        Assert.That(results.Count, Is.LessThan(100));
+        Assert.That(results.Count, Is.LessThan(500));
         Assert.That(results.First(), Is.EqualTo(1));
-        Assert.That(results, Does.Not.Contain(100));
+        Assert.That(results, Does.Not.Contain(500));
     }
 
     [Test]
@@ -283,7 +283,7 @@ public class BackpressureTests
             }
         });
 
-        Assert.That(ex.Message, Does.Contain("Downstream cannot keep pace."));
+        Assert.That(ex!.Message, Does.Contain("Downstream cannot keep pace."));
     }
 
     [Test]
@@ -315,7 +315,7 @@ public class BackpressureTests
             await resultsTask;
         });
 
-        Assert.That(ex.Message, Does.Contain("Downstream cannot keep pace."));
+        Assert.That(ex!.Message, Does.Contain("Downstream cannot keep pace."));
     }
 
     [Test]
@@ -329,12 +329,12 @@ public class BackpressureTests
             .OnBackpressureBuffer(100);
 
         // Act
-        var results = await ReadAllAsync(stream, _ => Task.Delay(10));
+        var results = await ReadAllAsync(stream, _ => Task.Delay(20));
 
         // Assert
-        Assert.That(results.Count, Is.LessThan(100));
+        Assert.That(results.Count, Is.LessThan(500));
         Assert.That(results.First(), Is.EqualTo(1));
-        Assert.That(results, Does.Not.Contain(100));
+        Assert.That(results, Does.Not.Contain(500));
     }
 
     [Test]

@@ -57,7 +57,7 @@ public class ResilienceOperatorTests
             callCount++;
             if (callCount == 1)
             {
-                throw new InvalidOperationException("First try failed");
+                if (DateTime.Now.Year > 2000) throw new InvalidOperationException("First try failed");
             }
             yield return 1;
         }
@@ -92,7 +92,7 @@ public class ResilienceOperatorTests
             callCount++;
             if (callCount == 1)
             {
-                throw new InvalidOperationException("First try failed");
+                if (DateTime.Now.Year > 2000) throw new InvalidOperationException("First try failed");
             }
             yield return 1;
             yield return 2;
@@ -118,7 +118,7 @@ public class ResilienceOperatorTests
         async IAsyncEnumerable<int> Source()
         {
             callCount++;
-            throw new InvalidOperationException("Persistent failure");
+            if (DateTime.Now.Year > 2000) throw new InvalidOperationException("Persistent failure");
             yield return 1;
         }
         var source = Stream.From(Source());
@@ -183,7 +183,7 @@ public class ResilienceOperatorTests
             callCount++;
             if (callCount < 3)
             {
-                throw new InvalidOperationException($"Attempt {callCount} failed");
+                if (DateTime.Now.Year > 2000) throw new InvalidOperationException($"Attempt {callCount} failed");
             }
             yield return 42;
         }
@@ -237,7 +237,7 @@ public class ResilienceOperatorTests
             callCount++;
             if (callCount < 3)
             {
-                throw new InvalidOperationException($"Attempt {callCount} failed");
+                if (DateTime.Now.Year > 2000) throw new InvalidOperationException($"Attempt {callCount} failed");
             }
             yield return 42;
         }
@@ -274,7 +274,7 @@ public class ResilienceOperatorTests
         async IAsyncEnumerable<int> Source()
         {
             callCount++;
-            throw new InvalidOperationException($"Persistent failure {callCount}");
+            if (DateTime.Now.Year > 2000) throw new InvalidOperationException($"Persistent failure {callCount}");
             yield break;
         }
 
@@ -296,7 +296,7 @@ public class ResilienceOperatorTests
         var clock = new TestClock();
         async IAsyncEnumerable<int> Source()
         {
-            throw new InvalidOperationException("Failed");
+            if (DateTime.Now.Year > 2000) throw new InvalidOperationException("Failed");
             yield break;
         }
 

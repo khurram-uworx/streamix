@@ -445,7 +445,7 @@ public class LinqExtensionsTests
                 .ToListAsync();
         });
 
-        Assert.That(ex.Message, Is.EqualTo("Test error"));
+        Assert.That(ex!.Message, Is.EqualTo("Test error"));
     }
 
     [Test]
@@ -462,7 +462,7 @@ public class LinqExtensionsTests
                 .ToListAsync();
         });
 
-        Assert.That(ex.Message, Is.EqualTo("Predicate error"));
+        Assert.That(ex!.Message, Is.EqualTo("Predicate error"));
     }
 
     [Test]
@@ -479,7 +479,7 @@ public class LinqExtensionsTests
                 .ToListAsync();
         });
 
-        Assert.That(ex.Message, Is.EqualTo("SelectMany error"));
+        Assert.That(ex!.Message, Is.EqualTo("SelectMany error"));
     }
 
     [Test]

@@ -82,7 +82,7 @@ public class ErrorHandlingTests
         {
             await foreach (var _ in stream) { }
         });
-        Assert.That(ex.Message, Is.EqualTo("Mapped"));
+        Assert.That(ex!.Message, Is.EqualTo("Mapped"));
         Assert.That(ex.InnerException, Is.InstanceOf<InvalidOperationException>());
     }
 
@@ -147,7 +147,7 @@ public class ErrorHandlingTests
         {
             await single.ToTask();
         });
-        Assert.That(ex.Message, Is.EqualTo("Mapped"));
+        Assert.That(ex!.Message, Is.EqualTo("Mapped"));
     }
 
     [Test]
