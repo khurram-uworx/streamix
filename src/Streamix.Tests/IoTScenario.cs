@@ -27,43 +27,6 @@ public class IoTScenarios
     static void logUpdate(ILogger logger, TemperatureUpdate update)
         => logger.LogInformation("{Reason}: Max Temp {Temperature:F2}°C at {Timestamp:HH:mm:ss}", update.Reason, update.Temperature, update.Timestamp);
 
-    static async IAsyncEnumerable<TemperatureUpdate> monitorSlidingMax(
-        IAsyncEnumerable<TemperatureReading> readings,
-        IoTScenarioOptions options,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var window = new List<TemperatureReading>();
-        double? lastEmittedMax = null;
-        var nextHeartbeatAt = DateTime.UtcNow + options.HeartbeatPeriod;
-
-        await foreach (var reading in readings.WithCancellation(cancellationToken))
-        {
-            window.Add(reading);
-
-            var cutoff = reading.Timestamp - options.Window;
-            window.RemoveAll(item => item.Timestamp < cutoff);
-
-            if (window.Count == 0)
-            {
-                continue;
-            }
-
-            var currentMax = window.Max(item => item.Temperature);
-
-            if (lastEmittedMax is null || currentMax != lastEmittedMax.Value)
-            {
-                yield return new TemperatureUpdate("change", currentMax, reading.Timestamp);
-                lastEmittedMax = currentMax;
-            }
-
-            while (lastEmittedMax is not null && reading.Timestamp >= nextHeartbeatAt)
-            {
-                yield return new TemperatureUpdate("heartbeat", lastEmittedMax.Value, reading.Timestamp);
-                nextHeartbeatAt += options.HeartbeatPeriod;
-            }
-        }
-    }
-
     static async IAsyncEnumerable<TemperatureReading> createIxSensor(
         string sensorId,
         int seed,
@@ -177,6 +140,43 @@ public class IoTScenarios
         }
     }
 
+    static async IAsyncEnumerable<TemperatureUpdate> monitorSlidingMax(
+        IAsyncEnumerable<TemperatureReading> readings,
+        IoTScenarioOptions options,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var window = new List<TemperatureReading>();
+        double? lastEmittedMax = null;
+        var nextHeartbeatAt = DateTime.UtcNow + options.HeartbeatPeriod;
+
+        await foreach (var reading in readings.WithCancellation(cancellationToken))
+        {
+            window.Add(reading);
+
+            var cutoff = reading.Timestamp - options.Window;
+            window.RemoveAll(item => item.Timestamp < cutoff);
+
+            if (window.Count == 0)
+            {
+                continue;
+            }
+
+            var currentMax = window.Max(item => item.Temperature);
+
+            if (lastEmittedMax is null || currentMax != lastEmittedMax.Value)
+            {
+                yield return new TemperatureUpdate("change", currentMax, reading.Timestamp);
+                lastEmittedMax = currentMax;
+            }
+
+            while (lastEmittedMax is not null && reading.Timestamp >= nextHeartbeatAt)
+            {
+                yield return new TemperatureUpdate("heartbeat", lastEmittedMax.Value, reading.Timestamp);
+                nextHeartbeatAt += options.HeartbeatPeriod;
+            }
+        }
+    }
+
     [Test]
     [Ignore("Long-running scenario demo")]
     public async Task IxWindow()
@@ -210,7 +210,19 @@ public class IoTScenarios
 
         using var cts = new CancellationTokenSource(options.RunDuration);
 
-        var updates = Stream.From(ct => monitorSlidingMax(Stream.Merge(sensors), options, ct));
+        var updates = Stream.Merge(sensors)
+            .MapWithTimestamp(r => r.Timestamp)
+            .WindowByTime(
+                duration: options.Window,
+                slide: options.SensorPeriod)
+            .FlatMap(window => 
+                Stream.From<double>((CancellationToken ct) => 
+                {
+                    var max = window.Select(ts => ts.Value.Temperature).MaxAsync(cancellationToken: ct);
+                    return max;
+                })
+                .Map(max => new TemperatureUpdate("window", max, DateTime.UtcNow))
+            );
 
         await updates.ForEachAsync(update => logUpdate(logger, update), cts.Token);
     }
