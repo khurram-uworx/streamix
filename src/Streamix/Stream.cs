@@ -616,19 +616,23 @@ public static class Stream
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        await using var scope = new StreamScope(cancellationToken);
+        var scope = new StreamScope(cancellationToken);
         try
         {
-            await action(scope);
-        }
-        catch (Exception)
-        {
-            // If the main action fails, we want to cancel siblings
-            await scope.DisposeAsync();
-            await scope.WaitAllAsync();
-            throw;
-        }
+            try
+            {
+                await action(scope);
+            }
+            catch (Exception ex)
+            {
+                scope.RecordException(ex);
+            }
 
-        await scope.WaitAllAsync();
+            await scope.WaitAllAsync();
+        }
+        finally
+        {
+            await scope.DisposeAsync();
+        }
     }
 }

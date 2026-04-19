@@ -142,7 +142,7 @@ Document one canonical semantic contract for supervision, cancellation, completi
 - `docs/UNION.md`
 - `WORK.md` (optional decision log entry)
 
-## Task 2: Harden Core Supervision Primitive
+## ✅ Task 2: Harden Core Supervision Primitive
 
 ### Priority
 

@@ -7,6 +7,8 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
     readonly CancellationTokenSource cts;
     readonly ConcurrentBag<Task> tasks = new();
     readonly object syncRoot = new();
+    readonly object errorSyncRoot = new();
+    Exception? firstException;
     bool disposed;
 
     public StreamScope(CancellationToken externalToken)
@@ -15,6 +17,25 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
     }
 
     public CancellationToken CancellationToken => cts.Token;
+
+    internal void RecordException(Exception ex)
+    {
+        if (ex is OperationCanceledException && cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        lock (errorSyncRoot)
+        {
+            firstException ??= ex;
+        }
+
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException) { }
+    }
 
     public void Run(Func<CancellationToken, Task> work)
     {
@@ -31,13 +52,9 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
                 {
                     await work(cts.Token);
                 }
-                catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                catch (Exception ex)
                 {
-                    // Expected
-                }
-                catch (Exception)
-                {
-                    await cts.CancelAsync();
+                    RecordException(ex);
                     throw;
                 }
             }, cts.Token);
@@ -48,63 +65,43 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
 
     public async Task WaitAllAsync()
     {
+        // Continuously wait for all registered tasks to complete.
+        // We use a loop because new tasks might be registered while we are waiting for current ones.
         while (true)
         {
             Task[] toWait;
             lock (syncRoot)
             {
+                // Snapshot the current set of incomplete tasks.
                 toWait = tasks.Where(t => !t.IsCompleted).ToArray();
             }
 
+            // If no incomplete tasks remain, all children have reached a terminal state.
             if (toWait.Length == 0) break;
 
             try
             {
+                // Wait for the current batch of tasks to settle.
+                // We use WhenAll but catch exceptions because we want all tasks to settle
+                // before we propagate the first failure recorded via RecordException.
                 await Task.WhenAll(toWait);
             }
             catch
             {
-                // We don't catch here to propagate first failure,
-                // but we need to make sure we wait for all before finishing ScopedAsync.
-                // Actually, Task.WhenAll will throw if any fails.
-                // But we want to ensure other tasks are cancelled and waited upon.
-                break;
+                // Exceptions are captured by individual tasks and reported via RecordException,
+                // so we ignore them here to continue waiting for other siblings to settle.
             }
         }
 
-        // Final wait for everything to settle (including cancellations)
-        List<Task> allTasks;
-        lock (syncRoot)
+        // After all tasks have settled, propagate the first failure if one occurred.
+        if (firstException != null)
         {
-            allTasks = tasks.ToList();
+            throw firstException;
         }
 
-        if (allTasks.Count > 0)
+        if (cts.IsCancellationRequested)
         {
-            try
-            {
-                await Task.WhenAll(allTasks);
-            }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
-            {
-                // If there's any non-cancellation exception, throw that instead
-                var firstFaulted = allTasks.FirstOrDefault(t => t.IsFaulted);
-                if (firstFaulted?.Exception != null)
-                {
-                    throw firstFaulted.Exception.InnerException ?? firstFaulted.Exception;
-                }
-                throw;
-            }
-            catch
-            {
-                // Propagate exception after all have settled
-                var firstFaulted = allTasks.FirstOrDefault(t => t.IsFaulted);
-                if (firstFaulted?.Exception != null)
-                {
-                    throw firstFaulted.Exception.InnerException ?? firstFaulted.Exception;
-                }
-                throw;
-            }
+            throw new OperationCanceledException(cts.Token);
         }
     }
 
