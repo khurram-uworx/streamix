@@ -32,7 +32,7 @@ Use **one supervision/lifetime model** for both tracks:
 
 Execution-graph diagnostics are optional and deferred unless needed to validate supervision behavior.
 
-## Normative Union Contract (Task 1 Freeze Target)
+## Final Union Contract
 
 The following statements are the implementation contract for this union plan.
 
@@ -41,8 +41,8 @@ The following statements are the implementation contract for this union plan.
 - A supervision boundary **MUST** define explicit child work.
 - Child work **MUST** include:
   - work spawned via `IStreamScope.Run(...)`
-  - operator-internal concurrent tasks for selected union operators
-  - channel-boundary worker tasks in selected phase-4 integrations
+  - operator-internal concurrent tasks for: `FlatMap`, `MapOrdered`, `FlatMapOrdered`, and `FlatMapAwait`
+  - channel-boundary worker tasks for: `PipeThroughChannel`, `RunOnChannel`, and `TeeToChannel`
 - Child registration **MUST** occur before child execution can escape supervision.
 
 ### Completion Semantics
@@ -65,8 +65,7 @@ The following statements are the implementation contract for this union plan.
   - first observed non-cancellation fault triggers boundary cancellation signal to siblings.
 - After cancellation is signaled, the boundary **MUST** still wait for all children to settle.
 - Exception propagation **MUST** be deterministic and documented:
-  - for v1, propagate first non-cancellation exception after all children settle
-  - additional faults may be logged/retained internally; aggregate surfacing is optional and explicitly documented if chosen
+  - for v1, propagate the first encountered non-cancellation exception after all children settle; subsequent faults are suppressed for propagation but may be logged internally.
 - `OperationCanceledException` caused by boundary cancellation **SHOULD** be treated as expected cancellation, not as a new primary fault.
 
 ### Ordering and Backpressure Invariants
@@ -108,7 +107,7 @@ The following statements are the implementation contract for this union plan.
 
 ## Task Backlog (Agent-Ready)
 
-## Task 1: Union Contract Freeze
+## ✅ Task 1: Union Contract Freeze
 
 ### Priority
 
