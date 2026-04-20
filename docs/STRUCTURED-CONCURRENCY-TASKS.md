@@ -16,9 +16,9 @@ This breakdown keeps that distinction explicit so the roadmap item is only close
 
 1. ✅ Task 1: Define the structured concurrency contract and minimal API
 2. ✅ Task 2: Implement scope/lifetime primitives in the core library
-3. Task 3: Integrate structured concurrency with stream operators and terminals
-4. Task 4: Add behavioral tests for cancellation, failure, and completion semantics
-5. Task 5: Update README and roadmap language
+3. ✅ Task 3: Integrate structured concurrency with stream operators and terminals
+4. ✅ Task 4: Add behavioral tests for cancellation, failure, and completion semantics
+5. ✅ Task 5: Update README and roadmap language
 
 ## Coordination Notes
 
@@ -133,7 +133,7 @@ Add the internal and public primitives needed to represent a structured concurre
 - `src/Streamix/Implementations/Stream.cs`
 - `src/Streamix/Implementations/ConnectableStream.cs`
 
-## Task 3: Integrate Structured Concurrency Into Stream Operations
+## ✅ Task 3: Integrate Structured Concurrency Into Stream Operations
 
 ### Priority
 
@@ -170,7 +170,7 @@ Ensure concurrent stream operations run inside the structured-concurrency model 
 - `src/Streamix/Implementations/ConnectableStream.cs`
 - `src/Streamix/Extensions/TerminalExtensions.cs`
 
-## Task 4: Add Behavioral Test Matrix
+## ✅ Task 4: Add Behavioral Test Matrix
 
 ### Priority
 
@@ -206,7 +206,7 @@ Prove the structured-concurrency contract with tests that distinguish it from th
 - `src/Streamix.Tests/StreamTests.cs`
 - `src/Streamix.Tests/Extensions/TerminalExtensionsTests.cs`
 
-## Task 5: Update README And Roadmap
+## ✅ Task 5: Update README And Roadmap
 
 ### Priority
 
