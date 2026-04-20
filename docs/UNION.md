@@ -172,7 +172,7 @@ Ensure the core scope primitive is robust and suitable for shared use by operato
 - `src/Streamix/Stream.cs`
 - `src/Streamix/Interfaces.cs`
 
-## Task 3: Integrate With Concurrent Operators
+## ✅ Task 3: Integrate With Concurrent Operators
 
 ### Priority
 

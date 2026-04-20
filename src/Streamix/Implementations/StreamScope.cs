@@ -4,8 +4,9 @@ namespace Streamix.Implementations;
 
 internal sealed class StreamScope : IStreamScope, IAsyncDisposable
 {
+    readonly CancellationToken externalToken;
     readonly CancellationTokenSource cts;
-    readonly ConcurrentBag<Task> tasks = new();
+    readonly ConcurrentDictionary<object, Task> tasks = new();
     readonly object syncRoot = new();
     readonly object errorSyncRoot = new();
     Exception? firstException;
@@ -13,10 +14,22 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
 
     public StreamScope(CancellationToken externalToken)
     {
+        this.externalToken = externalToken;
         this.cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
     }
 
     public CancellationToken CancellationToken => cts.Token;
+
+    public bool IsFaulted
+    {
+        get
+        {
+            lock (errorSyncRoot)
+            {
+                return firstException != null;
+            }
+        }
+    }
 
     internal void RecordException(Exception ex)
     {
@@ -39,69 +52,123 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
 
     public void Run(Func<CancellationToken, Task> work)
     {
+        _ = RunAsync(work);
+    }
+
+    public Task RunAsync(Func<CancellationToken, Task> work)
+    {
         ArgumentNullException.ThrowIfNull(work);
 
         lock (syncRoot)
         {
             if (disposed) throw new ObjectDisposedException(nameof(StreamScope));
 
-            // If already cancelled, we still want to track the task but it will likely exit immediately
+            var key = new object();
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var task = Task.Run(async () =>
             {
                 try
                 {
+                    cts.Token.ThrowIfCancellationRequested();
                     await work(cts.Token);
+                    tcs.TrySetResult();
+                }
+                catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
+                {
+                    tcs.TrySetCanceled(ex.CancellationToken);
                 }
                 catch (Exception ex)
                 {
                     RecordException(ex);
+                    tcs.TrySetException(ex);
+                }
+                finally
+                {
+                    tasks.TryRemove(key, out _);
+                }
+            });
+
+            tasks.TryAdd(key, task);
+            return tcs.Task;
+        }
+    }
+
+    public Task<T> RunAsync<T>(Func<CancellationToken, Task<T>> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+
+        lock (syncRoot)
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(StreamScope));
+
+            var key = new object();
+            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    cts.Token.ThrowIfCancellationRequested();
+                    var result = await work(cts.Token);
+                    tcs.TrySetResult(result);
+                    return result;
+                }
+                catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
+                {
+                    tcs.TrySetCanceled(ex.CancellationToken);
                     throw;
                 }
-            }, cts.Token);
+                catch (Exception ex)
+                {
+                    RecordException(ex);
+                    tcs.TrySetException(ex);
+                    throw;
+                }
+                finally
+                {
+                    tasks.TryRemove(key, out _);
+                }
+            });
 
-            tasks.Add(task);
+            tasks.TryAdd(key, task);
+            return tcs.Task;
         }
     }
 
     public async Task WaitAllAsync()
     {
-        // Continuously wait for all registered tasks to complete.
-        // We use a loop because new tasks might be registered while we are waiting for current ones.
         while (true)
         {
             Task[] toWait;
-            lock (syncRoot)
-            {
-                // Snapshot the current set of incomplete tasks.
-                toWait = tasks.Where(t => !t.IsCompleted).ToArray();
-            }
+            toWait = tasks.Values.Where(t => !t.IsCompleted).ToArray();
 
-            // If no incomplete tasks remain, all children have reached a terminal state.
             if (toWait.Length == 0) break;
 
             try
             {
-                // Wait for the current batch of tasks to settle.
-                // We use WhenAll but catch exceptions because we want all tasks to settle
-                // before we propagate the first failure recorded via RecordException.
-                await Task.WhenAll(toWait);
+                await Task.WhenAll(toWait).ConfigureAwait(false);
             }
             catch
             {
-                // Exceptions are captured by individual tasks and reported via RecordException,
-                // so we ignore them here to continue waiting for other siblings to settle.
+                // We wait for all to settle
+            }
+        }
+    }
+
+    public void ThrowIfFailed()
+    {
+        lock (errorSyncRoot)
+        {
+            if (firstException != null)
+            {
+                var ex = firstException;
+                firstException = null; // Prevent re-throw
+                throw ex;
             }
         }
 
-        // After all tasks have settled, propagate the first failure if one occurred.
-        if (firstException != null)
+        if (externalToken.IsCancellationRequested)
         {
-            throw firstException;
-        }
-
-        if (cts.IsCancellationRequested)
-        {
-            throw new OperationCanceledException(cts.Token);
+            throw new TaskCanceledException(null, null, externalToken);
         }
     }
 

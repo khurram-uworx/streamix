@@ -47,104 +47,87 @@ public static class StreamExtensions
             yield break;
         }
 
-        var channel = Channel.CreateBounded<TResult>(maxConcurrency);
+        var channel = Channel.CreateBounded<TResult>(new BoundedChannelOptions(maxConcurrency) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        var scope = new StreamScope(cancellationToken);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
+        try
         {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
+            scope.Run(async ct =>
             {
-                var enumerator = enumerable.WithCancellation(cts.Token).GetAsyncEnumerator();
                 try
                 {
-                    while (true)
+                    var tasks = new List<Task>();
+                    await foreach (var item in enumerable.WithCancellation(ct).ConfigureAwait(false))
                     {
-                        await semaphore.WaitAsync(cts.Token);
+                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
 
-                        if (!await enumerator.MoveNextAsync())
-                        {
-                            semaphore.Release();
-                            break;
-                        }
-
-                        var item = enumerator.Current;
-
-                        var task = Task.Run(async () =>
+                        tasks.Add(scope.RunAsync(async innerCt =>
                         {
                             try
                             {
                                 var result = await selector(item);
-                                await channel.Writer.WriteAsync(result, cts.Token);
-                            }
-                            catch (Exception ex)
-                            {
-                                channel.Writer.TryComplete(ex);
-                                throw;
+                                try
+                                {
+                                    await channel.Writer.WriteAsync(result, innerCt).ConfigureAwait(false);
+                                }
+                                catch (ChannelClosedException) { }
+                                catch (OperationCanceledException) { }
                             }
                             finally
                             {
                                 semaphore.Release();
                             }
-                        }, cts.Token);
+                        }));
 
-                        tasks.Add(task);
-                        tasks.RemoveAll(t => t.IsCompleted);
+                        if (tasks.Count > 1000) tasks.RemoveAll(t => t.IsCompleted);
                     }
+
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                    channel.Writer.TryComplete();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    await enumerator.DisposeAsync();
+                    channel.Writer.TryComplete(ex);
+                    scope.RecordException(ex);
+                    throw;
                 }
+            });
 
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                try { await Task.WhenAll(tasks); } catch { }
-                semaphore.Dispose();
-            }
-        }, cts.Token);
-
-        try
-        {
             while (true)
             {
-                bool hasMore;
+                if (scope.IsFaulted) break;
+                bool hasMore = false;
                 try
                 {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken);
+                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
 
-                if (!hasMore) break;
+                if (!hasMore || scope.IsFaulted) break;
 
-                while (channel.Reader.TryRead(out var result))
-                    yield return result;
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                    if (scope.IsFaulted) break;
+                }
             }
-
-            // Wait for producer to complete and check for exceptions
-            await producerTask;
-            await channel.Reader.Completion;
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            try
+            {
+                await scope.WaitAllAsync();
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+                semaphore.Dispose();
+                scope.ThrowIfFailed();
+            }
         }
     }
 
@@ -157,32 +140,21 @@ public static class StreamExtensions
             yield break;
         }
 
-        var channel = Channel.CreateBounded<Task<TResult>>(maxConcurrency);
+        var channel = Channel.CreateBounded<Task<TResult>>(new BoundedChannelOptions(maxConcurrency) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        var scope = new StreamScope(cancellationToken);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
+        try
         {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
+            scope.Run(async ct =>
             {
-                var enumerator = enumerable.WithCancellation(cts.Token).GetAsyncEnumerator();
                 try
                 {
-                    while (true)
+                    await foreach (var item in enumerable.WithCancellation(ct).ConfigureAwait(false))
                     {
-                        await semaphore.WaitAsync(cts.Token);
+                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
 
-                        if (!await enumerator.MoveNextAsync())
-                        {
-                            semaphore.Release();
-                            break;
-                        }
-
-                        var item = enumerator.Current;
-
-                        var task = Task.Run(async () =>
+                        var task = scope.RunAsync(async innerCt =>
                         {
                             try
                             {
@@ -192,64 +164,60 @@ public static class StreamExtensions
                             {
                                 semaphore.Release();
                             }
-                        }, cts.Token);
+                        });
 
-                        tasks.Add(task);
-                        await channel.Writer.WriteAsync(task, cts.Token);
-                        tasks.RemoveAll(t => t.IsCompleted);
+                        try
+                        {
+                            await channel.Writer.WriteAsync(task, ct).ConfigureAwait(false);
+                        }
+                        catch (ChannelClosedException) { }
+                        catch (OperationCanceledException) { }
                     }
+
+                    channel.Writer.TryComplete();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    await enumerator.DisposeAsync();
+                    channel.Writer.TryComplete(ex);
+                    scope.RecordException(ex);
+                    throw;
                 }
+            });
 
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                try { await Task.WhenAll(tasks); } catch { }
-                semaphore.Dispose();
-            }
-        }, cts.Token);
-
-        try
-        {
             while (true)
             {
-                bool hasMore;
+                if (scope.IsFaulted) break;
+                bool hasMore = false;
                 try
                 {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken);
+                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
 
-                if (!hasMore) break;
+                if (!hasMore || scope.IsFaulted) break;
 
                 while (channel.Reader.TryRead(out var task))
+                {
                     yield return await task;
+                    if (scope.IsFaulted) break;
+                }
             }
-
-            // Wait for producer to complete and check for exceptions
-            await producerTask;
-            await channel.Reader.Completion;
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            try
+            {
+                await scope.WaitAllAsync();
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+                semaphore.Dispose();
+                scope.ThrowIfFailed();
+            }
         }
     }
 
@@ -263,104 +231,92 @@ public static class StreamExtensions
             yield break;
         }
 
-        var channel = Channel.CreateBounded<TResult>(maxConcurrency);
+        var channel = Channel.CreateBounded<TResult>(new BoundedChannelOptions(maxConcurrency) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        var scope = new StreamScope(cancellationToken);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
+        try
         {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
+            scope.Run(async ct =>
             {
-                var enumerator = enumerable.WithCancellation(cts.Token).GetAsyncEnumerator();
                 try
                 {
-                    while (true)
+                    var tasks = new List<Task>();
+                    await foreach (var item in enumerable.WithCancellation(ct).ConfigureAwait(false))
                     {
-                        await semaphore.WaitAsync(cts.Token);
+                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
 
-                        if (!await enumerator.MoveNextAsync())
-                        {
-                            semaphore.Release();
-                            break;
-                        }
-
-                        var item = enumerator.Current;
-
-                        var task = Task.Run(async () =>
+                        tasks.Add(scope.RunAsync(async innerCt =>
                         {
                             try
                             {
-                                await foreach (var result in selector(item).WithCancellation(cts.Token))
-                                    await channel.Writer.WriteAsync(result, cts.Token);
-                            }
-                            catch (Exception ex)
-                            {
-                                channel.Writer.TryComplete(ex);
-                                throw;
+                                await foreach (var result in selector(item).WithCancellation(innerCt).ConfigureAwait(false))
+                                {
+                                    if (innerCt.IsCancellationRequested) break;
+                                    try
+                                    {
+                                        await channel.Writer.WriteAsync(result, innerCt).ConfigureAwait(false);
+                                    }
+                                    catch (ChannelClosedException)
+                                    {
+                                        break;
+                                    }
+                                }
                             }
                             finally
                             {
                                 semaphore.Release();
                             }
-                        }, cts.Token);
+                        }));
 
-                        tasks.Add(task);
-                        tasks.RemoveAll(t => t.IsCompleted);
+                        if (tasks.Count > 1000) tasks.RemoveAll(t => t.IsCompleted);
                     }
+
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                    channel.Writer.TryComplete();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    await enumerator.DisposeAsync();
+                    channel.Writer.TryComplete(ex);
+                    scope.RecordException(ex);
+                    throw;
                 }
+            });
 
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                try { await Task.WhenAll(tasks); } catch { }
-                semaphore.Dispose();
-            }
-        }, cts.Token);
-
-        try
-        {
             while (true)
             {
-                bool hasMore;
+                if (scope.IsFaulted) break;
+                bool hasMore = false;
                 try
                 {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken);
+                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
 
-                if (!hasMore) break;
+                if (!hasMore || scope.IsFaulted) break;
 
                 while (channel.Reader.TryRead(out var result))
+                {
                     yield return result;
+                    if (scope.IsFaulted) break;
+                }
             }
-
-            // Wait for producer to complete and check for exceptions
-            await producerTask;
-            await channel.Reader.Completion;
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            try
+            {
+                await scope.WaitAllAsync();
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+                semaphore.Dispose();
+                scope.ThrowIfFailed();
+            }
         }
     }
 
@@ -373,42 +329,40 @@ public static class StreamExtensions
             yield break;
         }
 
-        var channel = Channel.CreateBounded<ChannelReader<TResult>>(maxConcurrency);
+        var channel = Channel.CreateBounded<ChannelReader<TResult>>(new BoundedChannelOptions(maxConcurrency) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        var scope = new StreamScope(cancellationToken);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
+        try
         {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
+            scope.Run(async ct =>
             {
-                var enumerator = enumerable.WithCancellation(cts.Token).GetAsyncEnumerator();
                 try
                 {
-                    while (true)
+                    await foreach (var item in enumerable.WithCancellation(ct).ConfigureAwait(false))
                     {
-                        await semaphore.WaitAsync(cts.Token);
+                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
 
-                        if (!await enumerator.MoveNextAsync())
-                        {
-                            semaphore.Release();
-                            break;
-                        }
+                        var innerChannel = Channel.CreateBounded<TResult>(new BoundedChannelOptions(maxBufferedItemsPerInner) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
 
-                        var item = enumerator.Current;
-                        var innerChannel = Channel.CreateBounded<TResult>(maxBufferedItemsPerInner);
-
-                        var task = Task.Run(async () =>
+                        scope.Run(async innerCt =>
                         {
                             try
                             {
                                 var innerStream = selector(item);
-                                await foreach (var innerItem in innerStream.WithCancellation(cts.Token))
+                                await foreach (var innerItem in innerStream.WithCancellation(innerCt).ConfigureAwait(false))
                                 {
-                                    await innerChannel.Writer.WriteAsync(innerItem, cts.Token);
+                                    if (innerCt.IsCancellationRequested) break;
+                                    try
+                                    {
+                                        await innerChannel.Writer.WriteAsync(innerItem, innerCt).ConfigureAwait(false);
+                                    }
+                                    catch (ChannelClosedException)
+                                    {
+                                        break;
+                                    }
                                 }
-                                innerChannel.Writer.Complete();
+                                innerChannel.Writer.TryComplete();
                             }
                             catch (Exception ex)
                             {
@@ -419,54 +373,64 @@ public static class StreamExtensions
                             {
                                 semaphore.Release();
                             }
-                        }, cts.Token);
+                        });
 
-                        tasks.Add(task);
-                        await channel.Writer.WriteAsync(innerChannel.Reader, cts.Token);
-                        tasks.RemoveAll(t => t.IsCompleted);
+                        try
+                        {
+                            await channel.Writer.WriteAsync(innerChannel.Reader, ct).ConfigureAwait(false);
+                        }
+                        catch (ChannelClosedException) { }
+                        catch (OperationCanceledException) { }
                     }
+
+                    channel.Writer.TryComplete();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    await enumerator.DisposeAsync();
+                    channel.Writer.TryComplete(ex);
+                    scope.RecordException(ex);
+                    throw;
+                }
+            });
+
+            while (true)
+            {
+                if (scope.IsFaulted) break;
+                bool hasMore = false;
+                try
+                {
+                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
                 }
 
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                try { await Task.WhenAll(tasks); } catch { }
-                semaphore.Dispose();
-            }
-        }, cts.Token);
+                if (!hasMore || scope.IsFaulted) break;
 
-        try
-        {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
-            {
                 while (channel.Reader.TryRead(out var innerReader))
                 {
-                    await foreach (var result in innerReader.ReadAllAsync(cancellationToken))
+                    await foreach (var result in innerReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                    {
                         yield return result;
+                        if (scope.IsFaulted) break;
+                    }
+                    if (scope.IsFaulted) break;
                 }
             }
-
-            await producerTask;
-            await channel.Reader.Completion;
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            try
+            {
+                await scope.WaitAllAsync();
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+                semaphore.Dispose();
+                scope.ThrowIfFailed();
+            }
         }
     }
 
@@ -483,90 +447,93 @@ public static class StreamExtensions
             yield break;
         }
 
-        var channel = Channel.CreateBounded<TResult>(maxConcurrency);
+        var channel = Channel.CreateBounded<TResult>(new BoundedChannelOptions(maxConcurrency) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
+        var scope = new StreamScope(cancellationToken);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
+        try
         {
-            var semaphore = new SemaphoreSlim(maxConcurrency);
-            var tasks = new List<Task>();
-            try
+            scope.Run(async ct =>
             {
-                var enumerator = enumerable.WithCancellation(cts.Token).GetAsyncEnumerator();
                 try
                 {
-                    while (true)
+                    var tasks = new List<Task>();
+                    await foreach (var item in enumerable.WithCancellation(ct).ConfigureAwait(false))
                     {
-                        await semaphore.WaitAsync(cts.Token);
+                        await semaphore.WaitAsync(ct).ConfigureAwait(false);
 
-                        if (!await enumerator.MoveNextAsync())
-                        {
-                            semaphore.Release();
-                            break;
-                        }
-
-                        var item = enumerator.Current;
-
-                        var task = Task.Run(async () =>
+                        tasks.Add(scope.RunAsync(async innerCt =>
                         {
                             try
                             {
                                 var innerSingle = await selector(item);
-                                await foreach (var result in innerSingle.WithCancellation(cts.Token))
-                                    await channel.Writer.WriteAsync(result, cts.Token);
-                            }
-                            catch (Exception ex)
-                            {
-                                channel.Writer.TryComplete(ex);
-                                throw;
+                                await foreach (var result in innerSingle.WithCancellation(innerCt).ConfigureAwait(false))
+                                {
+                                    if (innerCt.IsCancellationRequested) break;
+                                    try
+                                    {
+                                        await channel.Writer.WriteAsync(result, innerCt).ConfigureAwait(false);
+                                    }
+                                    catch (ChannelClosedException)
+                                    {
+                                        break;
+                                    }
+                                }
                             }
                             finally
                             {
                                 semaphore.Release();
                             }
-                        }, cts.Token);
+                        }));
 
-                        tasks.Add(task);
-                        tasks.RemoveAll(t => t.IsCompleted);
+                        if (tasks.Count > 1000) tasks.RemoveAll(t => t.IsCompleted);
                     }
+
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                    channel.Writer.TryComplete();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    await enumerator.DisposeAsync();
+                    channel.Writer.TryComplete(ex);
+                    scope.RecordException(ex);
+                    throw;
+                }
+            });
+
+            while (true)
+            {
+                if (scope.IsFaulted) break;
+                bool hasMore = false;
+                try
+                {
+                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
                 }
 
-                await Task.WhenAll(tasks);
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-            finally
-            {
-                try { await Task.WhenAll(tasks); } catch { }
-                semaphore.Dispose();
-            }
-        }, cts.Token);
+                if (!hasMore || scope.IsFaulted) break;
 
-        try
-        {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
                 while (channel.Reader.TryRead(out var result))
+                {
                     yield return result;
-
-            await producerTask;
-            await channel.Reader.Completion;
+                    if (scope.IsFaulted) break;
+                }
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            try
+            {
+                await scope.WaitAllAsync();
+            }
+            finally
+            {
+                await scope.DisposeAsync();
+                semaphore.Dispose();
+                scope.ThrowIfFailed();
+            }
         }
     }
 

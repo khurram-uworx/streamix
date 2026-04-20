@@ -629,6 +629,7 @@ public static class Stream
             }
 
             await scope.WaitAllAsync();
+            scope.ThrowIfFailed();
         }
         finally
         {

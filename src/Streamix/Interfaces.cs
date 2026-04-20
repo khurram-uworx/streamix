@@ -114,9 +114,31 @@ public interface IStreamScope
     CancellationToken CancellationToken { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the scope has encountered a non-cancellation fault.
+    /// </summary>
+    bool IsFaulted { get; }
+
+    /// <summary>
     /// Spawns a concurrent task within the scope.
     /// The scope will wait for this task to complete.
     /// </summary>
     /// <param name="work">The work to execute concurrently.</param>
     void Run(Func<CancellationToken, Task> work);
+
+    /// <summary>
+    /// Spawns a concurrent task within the scope and returns a task that represents its execution.
+    /// The scope will wait for this task to complete even if the returned task is not awaited by the caller.
+    /// </summary>
+    /// <param name="work">The work to execute concurrently.</param>
+    /// <returns>A task representing the concurrent work.</returns>
+    Task RunAsync(Func<CancellationToken, Task> work);
+
+    /// <summary>
+    /// Spawns a concurrent task within the scope and returns a task that represents its execution.
+    /// The scope will wait for this task to complete even if the returned task is not awaited by the caller.
+    /// </summary>
+    /// <typeparam name="T">The type of the result produced by the task.</typeparam>
+    /// <param name="work">The work to execute concurrently.</param>
+    /// <returns>A task representing the concurrent work.</returns>
+    Task<T> RunAsync<T>(Func<CancellationToken, Task<T>> work);
 }
