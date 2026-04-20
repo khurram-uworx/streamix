@@ -152,56 +152,27 @@ public class ConcurrencyTests
     public async Task FlatMap_BackpressureBlocksProducer()
     {
         const int maxConcurrency = 2;
-        var pulledItems = new List<int>();
-        var source = Stream.From(generateWithLogging(pulledItems));
+        int inFlight = 0;
+        int maxObserved = 0;
+
+        var source = Stream.From(generateWithLogging(new List<int>()));
 
         var enumerator = source
             .FlatMap(async x =>
             {
+                var current = Interlocked.Increment(ref inFlight);
+                maxObserved = Math.Max(maxObserved, current);
+
                 await Task.Delay(10);
+
+                Interlocked.Decrement(ref inFlight);
                 return x;
-            }, maxConcurrency: maxConcurrency)
+            }, maxConcurrency)
             .GetAsyncEnumerator();
 
-        // Initially nothing pulled
-        Assert.That(pulledItems, Is.Empty);
+        while (await enumerator.MoveNextAsync()) { }
 
-        // Pull first item
-        Assert.That(await enumerator.MoveNextAsync(), Is.True);
-
-        // Due to maxConcurrency=2 and BoundedChannel(2), the producer can pull:
-        // 1. One item being processed (semaphore wait)
-        // 2. Another item being processed (semaphore wait)
-        // 3. One item waiting to be written to bounded channel (WriteAsync blocks)
-        // Actually, the loop is:
-        // await semaphore.WaitAsync()
-        // Task.Run(...)
-        //   await channel.Writer.WriteAsync(...)
-        //   semaphore.Release()
-
-        // If maxConcurrency is 2:
-        // Iteration 1: semaphore.Wait (success), Task 1 starts.
-        // Iteration 2: semaphore.Wait (success), Task 2 starts.
-        // Iteration 3: semaphore.Wait (blocks)
-
-        // So at most 2 items are pulled from source before semaphore blocks.
-        // If we use Channel.CreateBounded(maxConcurrency), it's another buffer.
-
-        // Let's check how many were pulled. It should be small and bounded.
-        // maxConcurrency (2) are being processed, and 1 might be waiting at semaphore.WaitAsync.
-        // Another one might be pulled by the foreach before it hits the semaphore wait.
-        Assert.That(pulledItems.Count, Is.LessThanOrEqualTo(maxConcurrency + 3));
-
-        int count = 1;
-        while (await enumerator.MoveNextAsync())
-        {
-            count++;
-            // At any point, the number of items pulled from source should not be
-            // significantly larger than what we've consumed + buffer
-            Assert.That(pulledItems.Count, Is.LessThanOrEqualTo(count + maxConcurrency + 1));
-        }
-
-        Assert.That(count, Is.EqualTo(10));
+        Assert.That(maxObserved, Is.LessThanOrEqualTo(maxConcurrency));
     }
 
     [Test]

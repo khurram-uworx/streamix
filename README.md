@@ -73,8 +73,6 @@ await sensorStream
     .ForEachAsync(Console.WriteLine);
 ```
 
-## Structured Concurrency
-
 Streamix provides a first-class structured concurrency model via `Stream.ScopedAsync`. It ensures that concurrent tasks have well-defined lifetimes, clear parent-child relationships, and predictable fail-fast semantics.
 
 ```csharp
@@ -90,8 +88,6 @@ await Stream.ScopedAsync(async scope =>
     // and propagates the first non-cancellation exception.
 });
 ```
-
-This supervision model is integrated into all concurrent operators (`FlatMap`, `MapOrdered`, `RunOnChannel`, etc.), ensuring that child tasks never outlive their parent boundary.
 
 Entity Framework integration is provided by `Streamix.Extensions` via `EfStream`.
 
@@ -124,10 +120,8 @@ await EfStream.From(
 
 Streamix is currently in active development. Core features including structured concurrency, time-series windowing, and channel-backed execution boundaries are implemented and verified.
 
-## Roadmap
+**Roadmap**
 
-- ✅ Structured concurrency support
-- ✅ Deeper channel integration (Supervision)
 - Additional time-based operators
 - Source generators for optimized pipelines
 

@@ -653,13 +653,6 @@ var retried = stream
 - CPU-bound work (use `Parallel` / `PLINQ`)
 - Legacy Rx-only pipelines
 
-## Roadmap
-
-- ✅ Structured concurrency support
-- ✅ Deeper channel integration (Supervision)
-- Additional time-based operators
-- Source generators for optimized pipelines
-
 ## Contributing
 
 - Keep API fluent and minimal
