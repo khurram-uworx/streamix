@@ -42,6 +42,7 @@ Common patterns:
 - `Map` / `MapAwait` / `MapOrdered`
 - `Filter` / `FilterAwait`
 - `FlatMap` / `FlatMapAwait` / `FlatMapOrdered` / `ConcatMap`
+- `ScopedAsync` (Structured Concurrency)
 - `Publish` / `Replay` / `RefCount`
 - `Retry` / `Timeout` / `OnErrorResume`
 - `ToListAsync`, `CountAsync`, `FirstAsync`, `SingleAsync`

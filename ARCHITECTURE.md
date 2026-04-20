@@ -26,6 +26,15 @@ Ordered operators have explicit runtime semantics:
 - `FlatMapOrdered` may buffer later inner items up to `maxBufferedItemsPerInner` while waiting for earlier inners.
 - Cancelling enumeration stops waiting and propagates cancellation into the ordered operator's in-flight work.
 
+## Structured Concurrency and Supervision
+
+Streamix uses a unified supervision model for both structured concurrency (`Stream.ScopedAsync`) and concurrent operators (`FlatMap`, `RunOnChannel`, etc.).
+
+- **Deterministic Settlement**: A supervision boundary does not complete until the parent body has finished AND all registered child tasks have reached a terminal state.
+- **Fail-Fast**: The first observed non-cancellation fault triggers boundary-wide cancellation via a linked token.
+- **Exception Propagation**: After all children settle, the first encountered non-cancellation exception is propagated. Subsequent faults are suppressed to ensure deterministic error handling.
+- **Boundary Integration**: Channel-backed boundaries (`PipeThroughChannel`, `RunOnChannel`) are fully integrated into the supervision model, ensuring that worker tasks are properly tracked and settled.
+
 ## Design Principles
 
 - Async-first (`IAsyncEnumerable<T>` + Channels)

@@ -26,12 +26,12 @@ What remains is the phase-4 differentiation work: make the channel runtime story
 
 ## Suggested Execution Order
 
-1. Task 1: Define the phase-4 contract and non-goals
-2. Task 2: Decide whether to expose execution-graph diagnostics or keep phase 4 limited to structured-concurrency integration
-3. Task 3: Implement the chosen channel execution-graph or supervision primitive
-4. Task 4: Integrate the primitive with concurrent operators and channel boundaries
-5. Task 5: Add behavioral tests for observability, supervision, and completion semantics
-6. Task 6: Update README, roadmap wording, and work-log notes
+1. ✅ Task 1: Define the phase-4 contract and non-goals
+2. ✅ Task 2: Decide whether to expose execution-graph diagnostics or keep phase 4 limited to structured-concurrency integration
+3. ✅ Task 3: Implement the chosen channel execution-graph or supervision primitive
+4. ✅ Task 4: Integrate the primitive with concurrent operators and channel boundaries
+5. ✅ Task 5: Add behavioral tests for observability, supervision, and completion semantics
+6. ✅ Task 6: Update README, roadmap wording, and work-log notes
 
 ## Coordination Notes
 
@@ -51,7 +51,7 @@ What remains is the phase-4 differentiation work: make the channel runtime story
   - `README.md`
   - `WORK.md`
 
-## Task 1: Define Phase-4 Channel Contract
+## ✅ Task 1: Define Phase-4 Channel Contract
 
 ### Priority
 
@@ -105,7 +105,7 @@ Decide the user-facing phase-4 target:
 - `README.md`
 - `WORK.md`
 
-## Task 2: Resolve Phase-4 Scope Split
+## ✅ Task 2: Resolve Phase-4 Scope Split
 
 ### Priority
 
@@ -142,7 +142,7 @@ The current channel doc mentions an optional execution-graph view and structured
 - `WORK.md`
 - `README.md`
 
-## Task 3: Implement Core Phase-4 Primitive
+## ✅ Task 3: Implement Core Phase-4 Primitive
 
 ### Priority
 
@@ -187,7 +187,7 @@ Add the internal and public primitive that powers the chosen phase-4 direction.
 - `src/Streamix/Implementations/Stream.cs`
 - `src/Streamix/Implementations/ConnectableStream.cs`
 
-## Task 4: Integrate Phase-4 Primitive With Concurrent Operators
+## ✅ Task 4: Integrate Phase-4 Primitive With Concurrent Operators
 
 ### Priority
 
@@ -222,7 +222,7 @@ Wire the phase-4 primitive into the relevant channel-backed and concurrent opera
 - `src/Streamix/Implementations/ConnectableStream.cs`
 - `src/Streamix/Extensions/TerminalExtensions.cs`
 
-## Task 5: Add Behavioral Test Matrix
+## ✅ Task 5: Add Behavioral Test Matrix
 
 ### Priority
 
@@ -259,7 +259,7 @@ Prove the chosen phase-4 semantics with focused tests.
 - `src/Streamix.Tests/BatchOperatorTests.cs`
 - `src/Streamix.Tests/ResourceSafetyTests.cs`
 
-## Task 6: Update README And Roadmap
+## ✅ Task 6: Update README And Roadmap
 
 ### Priority
 

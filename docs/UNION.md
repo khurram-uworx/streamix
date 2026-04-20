@@ -265,7 +265,7 @@ Prove union semantics through tests that distinguish plain bounded concurrency f
 - `src/Streamix.Tests/BatchOperatorTests.cs`
 - `src/Streamix.Tests/ResourceSafetyTests.cs`
 
-## Task 6: Docs and Roadmap Alignment
+## ✅ Task 6: Docs and Roadmap Alignment
 
 ### Priority
 

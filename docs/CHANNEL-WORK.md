@@ -17,6 +17,9 @@ Completed:
   - `TeeToChannel(...)`
   - channel-backed `Buffer(count, capacity, mode)`
   - channel-backed `Window(count, capacity, mode)`
+- Phase 4:
+  - ✅ Structured supervision over channel-backed work
+  - ✅ Deterministic boundary settlement
 
 ## Sequencing Constraints
 

@@ -55,6 +55,10 @@ Important semantics:
 - `Streamix.Extensions` includes EF Core as a transitive dependency by design.
 - The package currently exposes factory-based overloads; caller-owned context overloads are not part of the shipped API.
 
+## Concurrency Integration
+
+Extension-provided streams such as `EfStream` participate in the same core supervision model as standard streams, ensuring consistent resource safety and cancellation behavior when used with `ScopedAsync` or concurrent operators.
+
 ## Learn More
 
 - Overview and package map: [README.md](https://github.com/khurram-uworx/streamix/blob/main/README.md)

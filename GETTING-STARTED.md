@@ -106,6 +106,38 @@ await state.OnBackpressureLatest().ForEachAsync(UpdateUIAsync);
 await stream.OnBackpressureError().ForEachAsync(CriticalProcessAsync);
 ```
 
+## Structured Concurrency
+
+Streamix implements a structured concurrency model that ensures concurrent operations have well-defined lifetimes and predictable failure/cancellation semantics.
+
+### `Stream.ScopedAsync`
+
+The primary entry point for structured concurrency is `Stream.ScopedAsync`. It creates a supervision boundary that waits for all spawned tasks to complete before returning.
+
+```csharp
+await Stream.ScopedAsync(async scope =>
+{
+    scope.Run(async ct =>
+    {
+        await Task.Delay(100, ct);
+        Console.WriteLine("Task 1 done");
+    });
+
+    scope.Run(async ct =>
+    {
+        await Task.Delay(50, ct);
+        Console.WriteLine("Task 2 done");
+    });
+});
+// The scope completes only after all tasks settle.
+```
+
+### Fail-Fast Semantics
+
+If any task within the scope fails, the entire scope is cancelled (sibling cancellation), but it still waits for all remaining tasks to settle before propagating the first observed non-cancellation exception.
+
+This model is also integrated into concurrent operators like `FlatMap`, `MapOrdered`, and `RunOnChannel`, ensuring that child tasks never "escape" their parent operator's lifetime.
+
 ## Hot vs Cold Streams
 
 Streams are cold by default: each subscriber re-enumerates the source. `Publish()` turns a cold stream into a connectable shared stream.
@@ -623,7 +655,8 @@ var retried = stream
 
 ## Roadmap
 
-- Structured concurrency support
+- ✅ Structured concurrency support
+- ✅ Deeper channel integration (Supervision)
 - Additional time-based operators
 - Source generators for optimized pipelines
 
