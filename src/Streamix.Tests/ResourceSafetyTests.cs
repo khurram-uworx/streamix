@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Streamix.Implementations;
 
 namespace Streamix.Tests;
 
@@ -426,5 +427,34 @@ public class ResourceSafetyTests
         await stream.ToListAsync();
 
         Assert.That(createCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task SupervisedBoundary_DisposesResources_OnlyAfterAllChildrenSettle()
+    {
+        var resourceDisposed = false;
+        var childFinished = false;
+
+        var stream = Stream.Using(
+            () => new MockResource(),
+            resource => Stream.Create<int>(async emitter =>
+            {
+                await Stream.ScopedAsync(async scope =>
+                {
+                    scope.Run(async ct =>
+                    {
+                        await Task.Delay(100, ct);
+                        if (resourceDisposed) throw new Exception("Resource disposed too early!");
+                        childFinished = true;
+                    });
+                    await Task.Yield();
+                }, emitter.CancellationToken);
+            }).DoOnTerminate(() => resourceDisposed = true)
+        );
+
+        await foreach (var item in stream) { }
+
+        Assert.That(childFinished, Is.True);
+        Assert.That(resourceDisposed, Is.True);
     }
 }

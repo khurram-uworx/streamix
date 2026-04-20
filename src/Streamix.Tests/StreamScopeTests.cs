@@ -145,4 +145,30 @@ public class StreamScopeTests
 
         Assert.That(childFinishedAfterFailure, Is.True);
     }
+
+    [Test]
+    public async Task ScopedAsync_NestedScopes_ComposeSupervision()
+    {
+        var innerChildFinished = false;
+        var outerChildFinished = false;
+
+        await Stream.ScopedAsync(async outerScope =>
+        {
+            outerScope.Run(async ct =>
+            {
+                await Stream.ScopedAsync(async innerScope =>
+                {
+                    innerScope.Run(async innerCt =>
+                    {
+                        await Task.Delay(100, innerCt);
+                        innerChildFinished = true;
+                    });
+                }, ct);
+                outerChildFinished = true;
+            });
+        });
+
+        Assert.That(innerChildFinished, Is.True);
+        Assert.That(outerChildFinished, Is.True);
+    }
 }

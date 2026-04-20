@@ -139,7 +139,10 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
         while (true)
         {
             Task[] toWait;
-            toWait = tasks.Values.Where(t => !t.IsCompleted).ToArray();
+            lock (syncRoot)
+            {
+                toWait = tasks.Values.Where(t => !t.IsCompleted).ToArray();
+            }
 
             if (toWait.Length == 0) break;
 

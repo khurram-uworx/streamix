@@ -45,7 +45,14 @@ internal static class ScopeHelper
         finally
         {
             await scope.DisposeAsync().ConfigureAwait(false);
-            scope.ThrowIfFailed();
+            try
+            {
+                scope.ThrowIfFailed();
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected if the scope was cancelled via external token or fail-fast
+            }
         }
     }
 }
