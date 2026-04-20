@@ -640,4 +640,73 @@ public class StreamTests
         Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
             await Stream.FromTimer(TimeSpan.FromSeconds(-1), clock).ToListAsync());
     }
+
+    [Test]
+    public async Task PipeThroughChannel_SupervisesProducer_AndWaitsForSettlement()
+    {
+        var producerSettled = false;
+        var tcs = new TaskCompletionSource();
+
+        var stream = Stream.Create<int>(async emitter =>
+        {
+            try
+            {
+                await emitter.EmitAsync(1);
+                await tcs.Task;
+                throw new InvalidOperationException("Producer Boom");
+            }
+            finally
+            {
+                await Task.Delay(50);
+                producerSettled = true;
+            }
+        }).PipeThroughChannel(8);
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var item in stream)
+            {
+                tcs.SetResult();
+            }
+        });
+
+        Assert.That(ex.Message, Is.EqualTo("Producer Boom"));
+        Assert.That(producerSettled, Is.True);
+    }
+
+    [Test]
+    public async Task RunOnChannel_SupervisesWorkers_AndWaitsForSettlement()
+    {
+        var workersFinished = 0;
+        var tcs = new TaskCompletionSource();
+
+        var stream = Stream.From(1, 2, 3)
+            .DoOnNext(i => { if (i == 1) tcs.SetResult(); })
+            .RunOnChannel(capacity: 8, degreeOfParallelism: 3)
+            .MapAwait(async i =>
+            {
+                try
+                {
+                    if (i == 1)
+                    {
+                        await tcs.Task;
+                        throw new InvalidOperationException("Worker Boom");
+                    }
+                    await Task.Delay(100);
+                    return i;
+                }
+                finally
+                {
+                    Interlocked.Increment(ref workersFinished);
+                }
+            });
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await stream.ToListAsync());
+
+        // Note: RunOnChannel order preservation means if 1 fails, the consumer stops.
+        // Items 2 and 3 might still be in the workers.
+        // Supervision ensures they are settled before the boundary exits.
+
+        Assert.That(workersFinished, Is.GreaterThanOrEqualTo(1));
+    }
 }

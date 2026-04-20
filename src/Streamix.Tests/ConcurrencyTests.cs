@@ -537,4 +537,55 @@ public class ConcurrencyTests
         // but we definitely shouldn't yield all 9 successful items.
         Assert.That(yieldedItems.Count, Is.LessThan(9));
     }
+
+    [Test]
+    public async Task FlatMapOrdered_InnerFailure_CancelsSiblings_AndWaitsForSettlement()
+    {
+        var siblingCancelled = false;
+        var siblingSettled = false;
+        var tcs = new TaskCompletionSource();
+
+        var stream = Stream.From(1, 2)
+            .FlatMapOrdered(i =>
+            {
+                if (i == 1)
+                {
+                    return Stream.Create<int>(async emitter =>
+                    {
+                        await tcs.Task;
+                        throw new InvalidOperationException("Boom");
+                    });
+                }
+
+                return Stream.Create<int>(async emitter =>
+                {
+                    try
+                    {
+                        await Task.Delay(Timeout.Infinite, emitter.CancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        siblingCancelled = true;
+                    }
+                    finally
+                    {
+                        await Task.Yield();
+                        await Task.Delay(50);
+                        siblingSettled = true;
+                    }
+                });
+            }, maxConcurrency: 2);
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            var task = stream.ToListAsync();
+            await Task.Delay(50);
+            tcs.SetResult();
+            await task;
+        });
+
+        Assert.That(ex.Message, Is.EqualTo("Boom"));
+        Assert.That(siblingCancelled, Is.True);
+        Assert.That(siblingSettled, Is.True);
+    }
 }

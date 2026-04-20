@@ -113,7 +113,7 @@ static class ChannelExecution
         }
         finally
         {
-            await ScopeHelper.FinalizeScopeAsync(scope);
+            await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
         }
     }
 
@@ -158,9 +158,15 @@ static class ChannelExecution
         var workerTasks = Enumerable.Range(0, degreeOfParallelism)
             .Select(_ => scope.RunAsync(async ct =>
             {
-                await foreach (var entry in input.Reader.ReadAllAsync(ct))
+                try
                 {
-                    await output.Writer.WriteAsync(entry, ct);
+                    await foreach (var entry in input.Reader.ReadAllAsync(ct))
+                    {
+                        await output.Writer.WriteAsync(entry, ct);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
                 }
             }))
             .ToArray();

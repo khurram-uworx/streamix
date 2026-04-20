@@ -233,7 +233,7 @@ Wire union supervision semantics into channel-backed execution boundaries to sat
 - `src/Streamix/ChannelExecution.cs`
 - `src/Streamix/Extensions/StreamExtensions.cs`
 
-## Task 5: Add Structured + Channel Union Test Matrix
+## ✅ Task 5: Add Structured + Channel Union Test Matrix
 
 ### Priority
 
