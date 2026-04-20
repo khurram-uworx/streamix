@@ -86,7 +86,8 @@ public class HotStreamTests
         }
 
         var source = Stream.From(GenerateItems());
-        var shared = source.Publish().RefCount();
+        var connectable = source.Publish();
+        var shared = connectable.RefCount();
 
         // First execution with two concurrent subscribers
         var results1 = new List<int>();
@@ -101,6 +102,9 @@ public class HotStreamTests
         // Now allow continuation
         continueSignal.SetResult();
         await Task.WhenAll(t1, t2);
+
+        // Wait for RefCount to fully disconnect before third subscription
+        await connectable.WhenRefCountDisconnectedAsync();
 
         Assert.That(executionCount, Is.EqualTo(1));
         Assert.That(results1, Is.EquivalentTo(new[] { 1, 2 }));
