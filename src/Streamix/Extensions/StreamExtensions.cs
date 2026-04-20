@@ -89,44 +89,24 @@ public static class StreamExtensions
                 catch (Exception ex)
                 {
                     channel.Writer.TryComplete(ex);
-                    scope.RecordException(ex);
                     throw;
                 }
             });
 
-            while (true)
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                if (scope.IsFaulted) break;
-                bool hasMore = false;
-                try
-                {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore || scope.IsFaulted) break;
-
-                while (channel.Reader.TryRead(out var item))
-                {
-                    yield return item;
-                    if (scope.IsFaulted) break;
-                }
+                yield return item;
             }
         }
         finally
         {
             try
             {
-                await scope.WaitAllAsync();
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
             }
             finally
             {
-                await scope.DisposeAsync();
                 semaphore.Dispose();
-                scope.ThrowIfFailed();
             }
         }
     }
@@ -179,44 +159,24 @@ public static class StreamExtensions
                 catch (Exception ex)
                 {
                     channel.Writer.TryComplete(ex);
-                    scope.RecordException(ex);
                     throw;
                 }
             });
 
-            while (true)
+            await foreach (var task in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                if (scope.IsFaulted) break;
-                bool hasMore = false;
-                try
-                {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore || scope.IsFaulted) break;
-
-                while (channel.Reader.TryRead(out var task))
-                {
-                    yield return await task;
-                    if (scope.IsFaulted) break;
-                }
+                yield return await task;
             }
         }
         finally
         {
             try
             {
-                await scope.WaitAllAsync();
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
             }
             finally
             {
-                await scope.DisposeAsync();
                 semaphore.Dispose();
-                scope.ThrowIfFailed();
             }
         }
     }
@@ -278,44 +238,24 @@ public static class StreamExtensions
                 catch (Exception ex)
                 {
                     channel.Writer.TryComplete(ex);
-                    scope.RecordException(ex);
                     throw;
                 }
             });
 
-            while (true)
+            await foreach (var result in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                if (scope.IsFaulted) break;
-                bool hasMore = false;
-                try
-                {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore || scope.IsFaulted) break;
-
-                while (channel.Reader.TryRead(out var result))
-                {
-                    yield return result;
-                    if (scope.IsFaulted) break;
-                }
+                yield return result;
             }
         }
         finally
         {
             try
             {
-                await scope.WaitAllAsync();
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
             }
             finally
             {
-                await scope.DisposeAsync();
                 semaphore.Dispose();
-                scope.ThrowIfFailed();
             }
         }
     }
@@ -388,48 +328,29 @@ public static class StreamExtensions
                 catch (Exception ex)
                 {
                     channel.Writer.TryComplete(ex);
-                    scope.RecordException(ex);
                     throw;
                 }
             });
 
-            while (true)
+            await foreach (var innerReader in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                if (scope.IsFaulted) break;
-                bool hasMore = false;
-                try
+                await foreach (var result in innerReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore || scope.IsFaulted) break;
-
-                while (channel.Reader.TryRead(out var innerReader))
-                {
-                    await foreach (var result in innerReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        yield return result;
-                        if (scope.IsFaulted) break;
-                    }
+                    yield return result;
                     if (scope.IsFaulted) break;
                 }
+                if (scope.IsFaulted) break;
             }
         }
         finally
         {
             try
             {
-                await scope.WaitAllAsync();
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
             }
             finally
             {
-                await scope.DisposeAsync();
                 semaphore.Dispose();
-                scope.ThrowIfFailed();
             }
         }
     }
@@ -495,44 +416,24 @@ public static class StreamExtensions
                 catch (Exception ex)
                 {
                     channel.Writer.TryComplete(ex);
-                    scope.RecordException(ex);
                     throw;
                 }
             });
 
-            while (true)
+            await foreach (var result in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                if (scope.IsFaulted) break;
-                bool hasMore = false;
-                try
-                {
-                    hasMore = await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                if (!hasMore || scope.IsFaulted) break;
-
-                while (channel.Reader.TryRead(out var result))
-                {
-                    yield return result;
-                    if (scope.IsFaulted) break;
-                }
+                yield return result;
             }
         }
         finally
         {
             try
             {
-                await scope.WaitAllAsync();
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
             }
             finally
             {
-                await scope.DisposeAsync();
                 semaphore.Dispose();
-                scope.ThrowIfFailed();
             }
         }
     }
@@ -672,81 +573,69 @@ public static class StreamExtensions
         {
             FullMode = BoundedChannelFullMode.DropOldest
         });
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var scope = new StreamScope(cancellationToken);
 
-        var producerTask = Task.Run(async () =>
+        scope.Run(async ct =>
         {
             try
             {
-                await foreach (var item in enumerable.WithCancellation(cts.Token))
+                await foreach (var item in enumerable.WithCancellation(ct))
                     channel.Writer.TryWrite(item);
 
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 channel.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
-                while (channel.Reader.TryRead(out var item))
-                    yield return item;
-
-            await producerTask;
-            await channel.Reader.Completion;
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
         }
     }
 
     static async IAsyncEnumerable<T> onBackpressureError<T>(IAsyncEnumerable<T> enumerable, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var channel = Channel.CreateBounded<T>(1);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var scope = new StreamScope(cancellationToken);
 
-        var producerTask = Task.Run(async () =>
+        scope.Run(async ct =>
         {
             try
             {
-                await foreach (var item in enumerable.WithCancellation(cts.Token))
+                await foreach (var item in enumerable.WithCancellation(ct))
                     if (!channel.Writer.TryWrite(item))
                         throw new BackpressureException("Downstream cannot keep pace.");
 
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 channel.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
-                while (channel.Reader.TryRead(out var item))
-                    yield return item;
-
-            await producerTask;
-            await channel.Reader.Completion;
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
         }
     }
 
@@ -756,82 +645,70 @@ public static class StreamExtensions
         {
             FullMode = BoundedChannelFullMode.DropWrite
         });
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var scope = new StreamScope(cancellationToken);
 
-        var producerTask = Task.Run(async () =>
+        scope.Run(async ct =>
         {
             try
             {
-                await foreach (var item in enumerable.WithCancellation(cts.Token))
+                await foreach (var item in enumerable.WithCancellation(ct))
                     channel.Writer.TryWrite(item);
 
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 channel.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
-                while (channel.Reader.TryRead(out var item))
-                    yield return item;
-
-            await producerTask;
-            await channel.Reader.Completion;
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
         }
     }
 
     static async IAsyncEnumerable<T> onBackpressureBuffer<T>(IAsyncEnumerable<T> enumerable, int capacity, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var channel = Channel.CreateBounded<T>(capacity);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var scope = new StreamScope(cancellationToken);
 
-        var producerTask = Task.Run(async () =>
+        scope.Run(async ct =>
         {
             try
             {
-                await foreach (var item in enumerable.WithCancellation(cts.Token))
+                await foreach (var item in enumerable.WithCancellation(ct))
                 {
                     if (!channel.Writer.TryWrite(item))
                         throw new BackpressureException($"Buffer overflow: capacity of {capacity} reached.");
                 }
-                channel.Writer.Complete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 channel.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
-                while (channel.Reader.TryRead(out var item))
-                    yield return item;
-
-            await producerTask;
-            await channel.Reader.Completion;
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
         }
     }
 

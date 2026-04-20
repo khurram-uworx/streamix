@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Streamix.Implementations;
 
 namespace Streamix;
 
@@ -83,46 +84,36 @@ static class ChannelExecution
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var channel = CreateChannel<T>(capacity, mode, singleWriter: true, singleReader: true);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        var producerTask = Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (var item in source.WithCancellation(cts.Token))
-                {
-                    await WriteAsync(channel.Writer, item, mode, cts.Token);
-                }
-
-                channel.Writer.TryComplete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
-                channel.Writer.TryComplete();
-            }
-            catch (Exception ex)
-            {
-                channel.Writer.TryComplete(ex);
-            }
-        }, cts.Token);
+        var scope = new StreamScope(cancellationToken);
 
         try
         {
-            while (await channel.Reader.WaitToReadAsync(cancellationToken))
+            scope.Run(async ct =>
             {
-                while (channel.Reader.TryRead(out var item))
+                try
                 {
-                    yield return item;
-                }
-            }
+                    await foreach (var item in source.WithCancellation(ct))
+                    {
+                        await WriteAsync(channel.Writer, item, mode, ct);
+                    }
 
-            await producerTask;
-            await channel.Reader.Completion;
+                    channel.Writer.TryComplete();
+                }
+                catch (Exception ex)
+                {
+                    channel.Writer.TryComplete(ex);
+                    throw;
+                }
+            });
+
+            await foreach (var item in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
+            {
+                yield return item;
+            }
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await producerTask; } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope);
         }
     }
 
@@ -143,80 +134,66 @@ static class ChannelExecution
             SingleReader = true,
             SingleWriter = degreeOfParallelism == 1
         });
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        var producerTask = Task.Run(async () =>
+        var scope = new StreamScope(cancellationToken);
+
+        scope.Run(async ct =>
         {
             long index = 0;
-
             try
             {
-                await foreach (var item in source.WithCancellation(cts.Token))
+                await foreach (var item in source.WithCancellation(ct))
                 {
-                    await WriteAsync(input.Writer, new IndexedItem<T>(index++, item), mode, cts.Token);
+                    await WriteAsync(input.Writer, new IndexedItem<T>(index++, item), mode, ct);
                 }
-
-                input.Writer.TryComplete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 input.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 input.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         var workerTasks = Enumerable.Range(0, degreeOfParallelism)
-            .Select(_ => Task.Run(async () =>
+            .Select(_ => scope.RunAsync(async ct =>
             {
-                await foreach (var entry in input.Reader.ReadAllAsync(cts.Token))
+                await foreach (var entry in input.Reader.ReadAllAsync(ct))
                 {
-                    await output.Writer.WriteAsync(entry, cts.Token);
+                    await output.Writer.WriteAsync(entry, ct);
                 }
-            }, cts.Token))
+            }))
             .ToArray();
 
-        var completionTask = Task.Run(async () =>
+        scope.Run(async ct =>
         {
             try
             {
-                await producerTask;
                 await Task.WhenAll(workerTasks);
-                output.Writer.TryComplete();
-            }
-            catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
-            {
                 output.Writer.TryComplete();
             }
             catch (Exception ex)
             {
                 output.Writer.TryComplete(ex);
+                throw;
             }
-        }, cts.Token);
+        });
 
         var pending = new SortedDictionary<long, T>();
         long nextIndex = 0;
 
         try
         {
-            while (await output.Reader.WaitToReadAsync(cancellationToken))
+            await foreach (var entry in ScopeHelper.ReadAllSupervisedAsync(output.Reader, scope, cancellationToken).ConfigureAwait(false))
             {
-                while (output.Reader.TryRead(out var entry))
-                {
-                    pending[entry.Index] = entry.Item;
+                pending[entry.Index] = entry.Item;
 
-                    while (pending.Remove(nextIndex, out var item))
-                    {
-                        yield return item;
-                        nextIndex++;
-                    }
+                while (pending.Remove(nextIndex, out var item))
+                {
+                    yield return item;
+                    nextIndex++;
                 }
             }
-
-            await completionTask;
-            await output.Reader.Completion;
 
             while (pending.Remove(nextIndex, out var item))
             {
@@ -226,10 +203,7 @@ static class ChannelExecution
         }
         finally
         {
-            await cts.CancelAsync();
-            try { await completionTask; } catch { }
-            try { await producerTask; } catch { }
-            try { await Task.WhenAll(workerTasks); } catch { }
+            await ScopeHelper.FinalizeScopeAsync(scope);
         }
     }
 

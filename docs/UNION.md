@@ -203,7 +203,7 @@ Move core concurrent operators from ad hoc task/semaphore lifetime handling towa
 - `src/Streamix/Extensions/StreamExtensions.cs`
 - `src/Streamix/Extensions/TerminalExtensions.cs` (if helper reuse required)
 
-## Task 4: Integrate With Channel Boundaries (Phase 4 Core)
+## ✅ Task 4: Integrate With Channel Boundaries (Phase 4 Core)
 
 ### Priority
 
