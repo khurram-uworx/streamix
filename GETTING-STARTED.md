@@ -549,13 +549,34 @@ await (() => new AppDbContext()).ToStream(
     .ForEachAsync(customer => Console.WriteLine(customer.Name));
 ```
 
+Explicit streamed enumeration is also available:
+
+```csharp
+await EfStream.FromStreamed(
+        ctx => ctx.Set<Customer>().Where(c => c.IsActive),
+        () => new AppDbContext())
+    .Take(100)
+    .ForEachAsync(customer => Console.WriteLine(customer.Name));
+```
+
 EF semantics:
 
 - A new `DbContext` is created per subscription when using the factory overloads.
 - Query construction and execution use that same context instance.
-- Query execution materializes via `ToListAsync`, then emits each item.
-- Large queries therefore pay full per-subscription materialization cost.
+- `EfStream.From(...)` and `ToStream(...)` materialize via `ToListAsync`, then emit each item.
+- `EfStream.FromStreamed(...)` and `ToStreamed(...)` emit items as EF async enumeration advances.
+- Buffered mode pays full per-subscription materialization cost before first emission.
+- Streamed mode can stop earlier under downstream short-circuiting operators such as `Take`, but it keeps the `DbContext` alive for the duration of enumeration.
+- Caller-owned `DbContext` overloads are intentionally not part of the public Streamix EF API.
 - Referencing `Streamix.Extensions` intentionally adds EF Core as a transitive dependency.
+
+Provider-sensitive caveats for streamed mode:
+
+- Add `OrderBy(...)` when result order matters; streamed mode preserves query order, not implied table order.
+- Buffered mode usually surfaces query/materialization failures before the first item. Streamed mode can fail after a partial prefix has already been emitted.
+- Cancellation timing in streamed mode depends partly on the EF provider and may not be observed at exactly the same point as buffered mode.
+- Slow streamed consumers keep the `DbContext` and provider resources alive longer.
+- No EF-specific batching helpers are currently provided; prefer choosing buffered versus streamed mode deliberately before introducing application-level batching.
 
 ### ASP.NET Core
 

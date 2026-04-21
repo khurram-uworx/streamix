@@ -55,12 +55,17 @@ Streamix uses a unified supervision model for both structured concurrency (`Stre
 
 `EfStream` in `Streamix.Extensions` adapts EF queries to `IStream<T>` with explicit lifetime and materialization behavior:
 
-- Public entry points are `EfStream.From(...)` and `Func<DbContext>.ToStream(...)`.
+- Public buffered entry points are `EfStream.From(...)` and `Func<DbContext>.ToStream(...)`.
+- Public streamed entry points are `EfStream.FromStreamed(...)` and `Func<DbContext>.ToStreamed(...)`.
 - Factory-based usage creates one `DbContext` per subscription and disposes it on completion, error, or cancellation.
 - Query builder delegates are executed against the same context instance that performs query execution.
-- v1 executes EF queries with `ToListAsync(cancellationToken)`, then emits each item to downstream operators.
-- Result sets are fully materialized per subscription before first emission; this is not row-by-row provider streaming in v1.
-- Planned Phase 2 direction is to add an explicit opt-in streamed execution mode (`AsAsyncEnumerable`) while keeping buffered materialization as the default for backward-compatible semantics.
+- Buffered execution uses `ToListAsync(cancellationToken)`, then emits each item to downstream operators.
+- Streamed execution uses `AsAsyncEnumerable()` and emits items as EF async enumeration advances.
+- Buffered materialization remains the default on existing APIs for backward-compatible semantics.
+- Streamed execution can short-circuit earlier under downstream operators such as `Take`, but it keeps the `DbContext` alive for the duration of enumeration.
+- Streamed execution is provider-sensitive: if ordering matters, it must be expressed in the query; cancellation may be observed at different points by different providers; and failures can surface after partial emission rather than strictly before the first item.
+- Caller-owned `DbContext` overloads are intentionally excluded so that subscription ownership, disposal, and same-context execution rules stay explicit and safe.
+- EF-specific batching or paging helpers are intentionally deferred until real usage shows a gap that the buffered-versus-streamed choice plus existing Streamix operators does not address well.
 
 ## Implementation Notes
 

@@ -98,6 +98,14 @@ await EfStream.From(
     .ForEachAsync(customer => Console.WriteLine(customer.Name));
 ```
 
+`EfStream.From(...)` and `ToStream(...)` keep the buffered default contract. `EfStream.FromStreamed(...)` and `ToStreamed(...)` provide explicit opt-in streamed enumeration when you want row-by-row EF async enumeration semantics.
+
+For streamed EF queries, ordering, cancellation timing, and error timing remain provider-sensitive; the package README and getting-started guide document those caveats explicitly.
+
+The EF integration remains factory-based; caller-owned `DbContext` overloads are intentionally not part of the public API.
+
+EF-specific batching or paging helpers are not currently part of the contract; the guidance is to choose buffered versus streamed execution deliberately before adding application-level batching.
+
 ## Documentation
 
 - [GETTING-STARTED.md](GETTING-STARTED.md): Hello World, core concepts, feature surface, operators, interop, and package usage

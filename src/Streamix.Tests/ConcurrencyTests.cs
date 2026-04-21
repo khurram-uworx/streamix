@@ -299,16 +299,16 @@ public class ConcurrencyTests
 
         await using var enumerator = stream.GetAsyncEnumerator();
 
-        Assert.That(await enumerator.MoveNextAsync(), Is.True);
-        Assert.That(enumerator.Current, Is.EqualTo(10));
-
-        await secondInnerFailed.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        // In fail-fast, MoveNextAsync might return true with earlier items,
-        // OR it might throw promptly if it realizes a sibling failed.
-
         try
         {
+            Assert.That(await enumerator.MoveNextAsync(), Is.True);
+            Assert.That(enumerator.Current, Is.EqualTo(10));
+
+            await secondInnerFailed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            // In fail-fast, MoveNextAsync might return true with earlier items,
+            // OR it might throw promptly if it realizes a sibling failed.
+
             var nextTask = enumerator.MoveNextAsync().AsTask();
             firstInnerCanContinue.SetResult();
 

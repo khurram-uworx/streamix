@@ -1057,7 +1057,7 @@ public static class StreamExtensions
     /// Projects each element of a stream into a new form using a synchronous selector function.
     /// This overload is sequential and preserves source ordering.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">A transform function to apply to each element.</param>
@@ -1072,7 +1072,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent selector invocations.</param>
     /// <returns>An <see cref="IStream{TResult}"/> that emits mapped results in source order.</returns>
@@ -1086,7 +1086,7 @@ public static class StreamExtensions
     /// Projects each element of a stream into a new form using an asynchronous selector function.
     /// This overload is sequential and preserves source ordering by awaiting each selector invocation before advancing.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
@@ -1101,7 +1101,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent operations. Defaults to unbounded concurrency.</param>
     /// <returns>An <see cref="IStream{TResult}"/> that emits mapped results in completion order.</returns>
@@ -1118,7 +1118,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent inner streams. Defaults to unbounded concurrency.</param>
     /// <returns>An <see cref="IStream{TResult}"/> that emits items from inner streams in completion order.</returns>
@@ -1137,7 +1137,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent operations. Defaults to unbounded concurrency.</param>
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the one-to-many transform function on each element of the input stream.</returns>
@@ -1156,7 +1156,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent inner streams. Defaults to unbounded concurrency.</param>
     /// <param name="maxBufferedItemsPerInner">The maximum number of buffered items allowed per inner stream while preserving outer ordering. Defaults to 16.</param>
@@ -1175,7 +1175,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">An asynchronous transform function to apply to each element.</param>
     /// <param name="maxConcurrency">The maximum number of concurrent operations. Defaults to unbounded concurrency.</param>
     /// <returns>An <see cref="IStream{TResult}"/> whose elements are the result of invoking the async one-to-one transform function on each element of the input stream.</returns>
@@ -1192,7 +1192,7 @@ public static class StreamExtensions
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TResult">The type of the elements in the resulting stream.</typeparam>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="selector">A transform function to apply to each element.</param>
     /// <returns>An <see cref="IStream{TResult}"/> that emits items from each inner stream before moving to the next source item.</returns>
     public static IStream<TResult> ConcatMap<T, TResult>(this IStream<T> source, Func<T, IStream<TResult>> selector)
@@ -1201,7 +1201,7 @@ public static class StreamExtensions
     /// <summary>
     /// Filters a stream of values based on a predicate.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="predicate">A function to test each element for a condition.</param>
     /// <returns>An <see cref="IStream{T}"/> that contains elements from the input stream that satisfy the condition.</returns>
     public static IStream<T> Filter<T>(this IStream<T> source, Func<T, bool> predicate)
@@ -1210,7 +1210,7 @@ public static class StreamExtensions
     /// <summary>
     /// Filters a stream of values based on an asynchronous predicate.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="predicate">An asynchronous function to test each element for a condition.</param>
     /// <returns>An <see cref="IStream{T}"/> that contains elements from the input stream that satisfy the condition.</returns>
     public static IStream<T> FilterAsync<T>(this IStream<T> source, Func<T, ValueTask<bool>> predicate)
@@ -1219,7 +1219,7 @@ public static class StreamExtensions
     /// <summary>
     /// Retries a stream if it fails, up to a specified number of times.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="retryCount">The number of times to retry.</param>
     /// <returns>A retrying <see cref="IStream{T}"/>.</returns>
     public static IStream<T> Retry<T>(this IStream<T> source, int retryCount = 1)
@@ -1228,7 +1228,7 @@ public static class StreamExtensions
     /// <summary>
     /// Retries a stream if it fails, up to a specified number of times, with a backoff strategy.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="retryCount">The number of times to retry.</param>
     /// <param name="backoffStrategy">A function that computes the delay before the next retry attempt based on the attempt number (1-based) and the exception that caused the failure.</param>
     /// <returns>A retrying <see cref="IStream{T}"/> with backoff.</returns>
@@ -1238,7 +1238,7 @@ public static class StreamExtensions
     /// <summary>
     /// Groups elements of a stream into lists of a specified size.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="count">The maximum size of each buffer.</param>
     /// <returns>An <see cref="IStream{T}"/> of <see cref="IList{T}"/>.</returns>
     public static IStream<IList<T>> Buffer<T>(this IStream<T> source, int count)
@@ -1250,7 +1250,7 @@ public static class StreamExtensions
     /// <summary>
     /// Terminates a stream with a <see cref="TimeoutException"/> if it doesn't emit an element within a specified time interval.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="interval">The maximum time interval between elements.</param>
     /// <returns>A timeout-monitored <see cref="IStream{T}"/>.</returns>
     public static IStream<T> Timeout<T>(this IStream<T> source, TimeSpan interval)
@@ -1259,7 +1259,7 @@ public static class StreamExtensions
     /// <summary>
     /// Tracks progress through a specific stage of the pipeline with timing information using a custom logging action.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="checkpointName">The name of the checkpoint.</param>
     /// <param name="loggerAction">The action to use for logging.</param>
     /// <returns>The same stream.</returns>
@@ -1269,7 +1269,7 @@ public static class StreamExtensions
     /// <summary>
     /// Provides a comprehensive trace of every stream signal using a custom logging action.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="loggerAction">The action to use for logging.</param>
     /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
     /// <returns>The same stream.</returns>
@@ -1279,7 +1279,7 @@ public static class StreamExtensions
     /// <summary>
     /// Resumes a stream with another stream if an error occurs.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="errorHandler">A function that returns a fallback stream given the exception.</param>
     /// <returns>A resilient <see cref="IStream{T}"/>.</returns>
     public static IStream<T> OnErrorResume<T>(this IStream<T> source, Func<Exception, IStream<T>> errorHandler)
@@ -1288,7 +1288,7 @@ public static class StreamExtensions
     /// <summary>
     /// Resumes a stream with a single constant value if an error occurs.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="value">The value to emit on error.</param>
     /// <returns>A resilient <see cref="IStream{T}"/>.</returns>
     public static IStream<T> OnErrorReturn<T>(this IStream<T> source, T value)
@@ -1297,7 +1297,7 @@ public static class StreamExtensions
     /// <summary>
     /// Maps a stream error into another exception.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="mapper">A function to map the exception.</param>
     /// <returns>An <see cref="IStream{T}"/> with mapped errors.</returns>
     public static IStream<T> OnErrorMap<T>(this IStream<T> source, Func<Exception, Exception> mapper)
@@ -1307,7 +1307,7 @@ public static class StreamExtensions
     /// Executes an action for each element of the stream without modifying it.
     /// This operator does not catch exceptions thrown by the action.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onNext">The action to execute for each element.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> DoOnNext<T>(this IStream<T> source, Action<T> onNext)
@@ -1316,7 +1316,7 @@ public static class StreamExtensions
     /// <summary>
     /// Alias for <see cref="DoOnNext{T}(IStream{T}, Action{T})"/>.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onNext">The action to execute for each element.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Do<T>(this IStream<T> source, Action<T> onNext)
@@ -1325,7 +1325,7 @@ public static class StreamExtensions
     /// <summary>
     /// Alias for <see cref="DoOnNext{T}(IStream{T}, Action{T})"/>.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onNext">The action to execute for each element.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Tap<T>(this IStream<T> source, Action<T> onNext)
@@ -1335,7 +1335,7 @@ public static class StreamExtensions
     /// Executes an action when the stream fails.
     /// This hook does not fire if the stream is cancelled or completes successfully.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onError">The action to execute with the exception.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> DoOnError<T>(this IStream<T> source, Action<Exception> onError)
@@ -1345,7 +1345,7 @@ public static class StreamExtensions
     /// Executes an action when the stream completes successfully.
     /// This hook does not fire if an error occurs or the stream is cancelled.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onComplete">The action to execute.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> DoOnComplete<T>(this IStream<T> source, Action onComplete)
@@ -1355,7 +1355,7 @@ public static class StreamExtensions
     /// Executes an action when the stream terminates (either successfully or with an error).
     /// This hook also fires if the stream is cancelled during enumeration.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="onTerminate">The action to execute.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> DoOnTerminate<T>(this IStream<T> source, Action onTerminate)
@@ -1364,7 +1364,7 @@ public static class StreamExtensions
     /// <summary>
     /// Mirrors items into a channel writer while preserving the main stream.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="writer">The side-channel writer.</param>
     /// <param name="completeWriter">Whether this operator owns writer completion.</param>
     /// <returns>The original stream with side-channel writes applied.</returns>
@@ -1374,14 +1374,14 @@ public static class StreamExtensions
     /// <summary>
     /// Shares the source stream among multiple subscribers.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>An <see cref="IConnectableStream{T}"/>.</returns>
     public static IConnectableStream<T> Publish<T>(this IStream<T> source) => new ConnectableStream<T>(source);
 
     /// <summary>
     /// Shares the source stream among multiple subscribers and replays the last <paramref name="bufferSize"/> elements to late subscribers.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="bufferSize">The maximum number of elements to replay to late subscribers.</param>
     /// <returns>An <see cref="IConnectableStream{T}"/>.</returns>
     public static IConnectableStream<T> Replay<T>(this IStream<T> source, int bufferSize)
@@ -1391,7 +1391,7 @@ public static class StreamExtensions
     /// Tracks progress through a specific stage of the pipeline with timing information.
     /// Logs when items pass through, including time since stream start and time since last item.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="checkpointName">The name of the checkpoint.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Checkpoint<T>(this IStream<T> source, string checkpointName)
@@ -1400,7 +1400,7 @@ public static class StreamExtensions
     /// <summary>
     /// Provides a comprehensive trace of every stream signal using an <see cref="ILogger"/>.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="logger">The logger to use.</param>
     /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
     /// <returns>The same stream.</returns>
@@ -1410,7 +1410,7 @@ public static class StreamExtensions
     /// <summary>
     /// Provides a comprehensive trace of every stream signal with a specified prefix.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="prefix">The prefix to use in traces.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Trace<T>(this IStream<T> source, string prefix)
@@ -1420,14 +1420,14 @@ public static class StreamExtensions
     /// Provides a comprehensive trace of every stream signal (Subscribe, Next, Error, Complete, Cancel, Dispose).
     /// Uses the stream name as a prefix if available.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Trace<T>(this IStream<T> source) => source.Trace(source.Name ?? "");
 
     /// <summary>
     /// Logs items, errors, and completion of the stream using a custom logging action.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="loggerAction">The action to use for logging.</param>
     /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
     /// <returns>The same stream.</returns>
@@ -1443,7 +1443,7 @@ public static class StreamExtensions
     /// <summary>
     /// Logs items, errors, and completion of the stream using a custom logging action.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="loggerAction">The action to use for logging.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> LogAction<T>(this IStream<T> source, Action<string> loggerAction)
@@ -1452,7 +1452,7 @@ public static class StreamExtensions
     /// <summary>
     /// Logs items, errors, and completion of the stream to standard output with a specified prefix.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="prefix">The prefix to use in logs.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Log<T>(this IStream<T> source, string prefix)
@@ -1462,14 +1462,14 @@ public static class StreamExtensions
     /// Logs items, errors, and completion of the stream to standard output.
     /// Uses the stream name as a prefix if available.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Log<T>(this IStream<T> source) => Log(source, source.Name ?? "");
 
     /// <summary>
     /// Logs items, errors, and completion of the stream using an <see cref="ILogger"/>.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="logger">The logger to use.</param>
     /// <param name="prefix">Optional prefix. If not provided, the stream name is used.</param>
     /// <returns>The same stream.</returns>
@@ -1486,14 +1486,14 @@ public static class StreamExtensions
     /// Logs items, errors, and completion of the stream to debug output.
     /// Uses the stream name as a prefix if available.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Debug<T>(this IStream<T> source) => source.Debug(source.Name ?? "");
 
     /// <summary>
     /// Logs items, errors, and completion of the stream to debug output with a specified prefix.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="prefix">The prefix to use in logs.</param>
     /// <returns>The same stream.</returns>
     public static IStream<T> Debug<T>(this IStream<T> source, string prefix)
@@ -1508,7 +1508,7 @@ public static class StreamExtensions
     /// Inserts a bounded channel-backed execution boundary into the pipeline.
     /// This decouples upstream production from downstream consumption using explicit channel semantics.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="capacity">The bounded channel capacity.</param>
     /// <param name="mode">The backpressure policy used when the boundary is full.</param>
     /// <returns>A stream that crosses an explicit channel boundary before continuing downstream.</returns>
@@ -1519,7 +1519,7 @@ public static class StreamExtensions
     /// Keeps only the latest item when downstream is slow.
     /// Older items in the buffer are discarded in favor of newer ones.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>A stream with backpressure latest strategy applied.</returns>
     public static IStream<T> OnBackpressureLatest<T>(this IStream<T> source)
         => Stream.From(onBackpressureLatest(source), source.Clock, source.Name);
@@ -1528,7 +1528,7 @@ public static class StreamExtensions
     /// Throws a <see cref="BackpressureException"/> when downstream cannot keep pace.
     /// Signals immediate failure rather than buffering or dropping items.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>A stream with backpressure error strategy applied.</returns>
     public static IStream<T> OnBackpressureError<T>(this IStream<T> source)
         => Stream.From(onBackpressureError(source), source.Clock, source.Name);
@@ -1537,7 +1537,7 @@ public static class StreamExtensions
     /// Drops items when downstream cannot keep pace.
     /// Items already buffered are preserved while new arrivals are discarded.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <returns>A stream with backpressure drop strategy applied.</returns>
     public static IStream<T> OnBackpressureDrop<T>(this IStream<T> source)
         => Stream.From(onBackpressureDrop(source), source.Clock, source.Name);
@@ -1546,7 +1546,7 @@ public static class StreamExtensions
     /// Buffers items up to <paramref name="capacity"/> when downstream is slow.
     /// Throws <see cref="BackpressureException"/> if buffer overflows.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="capacity">Maximum number of items to buffer.</param>
     /// <returns>A stream with backpressure buffering strategy applied.</returns>
     public static IStream<T> OnBackpressureBuffer<T>(this IStream<T> source, int capacity)
@@ -1558,7 +1558,7 @@ public static class StreamExtensions
     /// <summary>
     /// Groups elements of a stream into lists of a specified size after crossing a bounded channel-backed boundary.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="count">The maximum size of each buffer.</param>
     /// <param name="capacity">The bounded channel capacity used by the buffering boundary.</param>
     /// <param name="mode">The backpressure policy used when the boundary is full.</param>
@@ -1572,7 +1572,7 @@ public static class StreamExtensions
     /// <summary>
     /// Groups elements of a stream into windows of a specified size after crossing a bounded channel-backed boundary.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="count">The maximum size of each window.</param>
     /// <param name="capacity">The bounded channel capacity used by the windowing boundary.</param>
     /// <param name="mode">The backpressure policy used when the boundary is full.</param>
@@ -1586,7 +1586,7 @@ public static class StreamExtensions
     /// <summary>
     /// Inserts a channel-backed execution boundary and relays items through a worker pool while preserving source ordering.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="capacity">The bounded channel capacity.</param>
     /// <param name="degreeOfParallelism">The number of workers draining the channel-backed boundary.</param>
     /// <param name="mode">The backpressure policy used when the boundary is full.</param>
@@ -1598,7 +1598,7 @@ public static class StreamExtensions
     /// Terminal operation that writes all items of the stream to the specified <see cref="ChannelWriter{T}"/>.
     /// Supports backpressure: if the channel is bounded and full, this method will asynchronously wait for space to become available.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="writer">The channel writer to write items to.</param>
     /// <param name="completeWriter">Whether to complete the writer when the stream completes (either successfully or with an error).</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -1615,7 +1615,7 @@ public static class StreamExtensions
     /// <summary>
     /// Delays the emission of each element in a stream by a specified time interval.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="interval">The time interval to delay each element by.</param>
     /// <returns>A delayed <see cref="IStream{T}"/>.</returns>
     public static IStream<T> Delay<T>(this IStream<T> source, TimeSpan interval)
@@ -1624,7 +1624,7 @@ public static class StreamExtensions
     /// <summary>
     /// Throttles a stream by emitting only the first element in each time interval.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="interval">The time interval to throttle by.</param>
     /// <returns>A throttled <see cref="IStream{T}"/>.</returns>
     public static IStream<T> Throttle<T>(this IStream<T> source, TimeSpan interval)
@@ -1633,7 +1633,7 @@ public static class StreamExtensions
     /// <summary>
     /// Returns a specified number of contiguous elements from the start of a stream.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="count">The number of elements to return.</param>
     /// <returns>An <see cref="IStream{T}"/> that contains the specified number of elements from the start of the input stream.</returns>
     public static IStream<T> Take<T>(this IStream<T> source, int count)
@@ -1642,7 +1642,7 @@ public static class StreamExtensions
     /// <summary>
     /// Bypasses a specified number of elements in a stream and then returns the remaining elements.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="count">The number of elements to skip before returning the remaining elements.</param>
     /// <returns>An <see cref="IStream{T}"/> that contains the elements that occur after the specified index in the input stream.</returns>
     public static IStream<T> Skip<T>(this IStream<T> source, int count)
@@ -1651,7 +1651,7 @@ public static class StreamExtensions
     /// <summary>
     /// Terminal operation that executes an action for each element of the stream.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="action">The action to execute for each element.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all elements have been processed.</returns>
@@ -1664,7 +1664,7 @@ public static class StreamExtensions
     /// <summary>
     /// Terminal operation that executes an asynchronous action for each element of the stream.
     /// </summary>
-    /// <param name="source">The stream to filter.</param>
+    /// <param name="source">The stream</param>
     /// <param name="action">The asynchronous action to execute for each element.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all elements have been processed.</returns>
