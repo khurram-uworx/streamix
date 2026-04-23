@@ -1,4 +1,3 @@
-using Streamix.Implementations;
 using System.Threading.Channels;
 
 namespace Streamix;
@@ -8,6 +7,25 @@ namespace Streamix;
 /// </summary>
 public static class TimeseriesExtensions
 {
+    enum TimedSignalKind
+    {
+        Item,
+        Tick,
+        SourceCompleted,
+        SourceFault,
+    }
+
+    readonly record struct TimedSignal<T>(
+        TimedSignalKind Kind,
+        T? Item = default,
+        Exception? Error = null)
+    {
+        public static TimedSignal<T> FromItem(T item) => new(TimedSignalKind.Item, item);
+        public static TimedSignal<T> Tick() => new(TimedSignalKind.Tick);
+        public static TimedSignal<T> SourceCompleted() => new(TimedSignalKind.SourceCompleted);
+        public static TimedSignal<T> SourceFault(Exception error) => new(TimedSignalKind.SourceFault, default, error);
+    }
+
     class SessionState<T>
     {
         public long MinTicks { get; set; }
@@ -439,86 +457,108 @@ public static class TimeseriesExtensions
         return Stream.Create<IList<T>>(async (emitter, ct) =>
         {
             var clock = source.Clock;
-            var channel = Channel.CreateUnbounded<object?>();
-            var tick = new object();
-
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var scope = new StreamScope(internalCts.Token);
-            try
+            var signalChannel = Channel.CreateBounded<TimedSignal<T>>(new BoundedChannelOptions(1)
             {
-                // Timer
-                scope.Run(async innerCt =>
-                {
-                    try
-                    {
-                        while (!innerCt.IsCancellationRequested)
-                        {
-                            await clock.Delay(interval, innerCt).ConfigureAwait(false);
-                            channel.Writer.TryWrite(tick);
-                        }
-                    }
-                    catch (OperationCanceledException) { }
-                });
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
 
-                // Source
-                scope.Run(async innerCt =>
-                {
-                    try
-                    {
-                        await foreach (var item in source.WithCancellation(innerCt).ConfigureAwait(false))
-                        {
-                            channel.Writer.TryWrite(item);
-                        }
-                    }
-                    finally
-                    {
-                        channel.Writer.TryComplete();
-                    }
-                });
-
-                var buffer = new List<T>(maxCount ?? 16);
+            var sourceTask = Task.Run(async () =>
+            {
                 try
                 {
-                    await foreach (var itemOrTick in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                    await foreach (var item in source.WithCancellation(internalCts.Token).ConfigureAwait(false))
                     {
-                        if (ReferenceEquals(itemOrTick, tick))
-                        {
-                            if (buffer.Count > 0)
-                            {
-                                await emitter.EmitAsync(buffer).ConfigureAwait(false);
-                                buffer = new List<T>(maxCount ?? 16);
-                            }
-                        }
-                        else
-                        {
-                            buffer.Add((T)itemOrTick!);
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.FromItem(item), internalCts.Token).ConfigureAwait(false);
+                    }
+
+                    await signalChannel.Writer.WriteAsync(TimedSignal<T>.SourceCompleted(), internalCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.SourceFault(ex), internalCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                    {
+                    }
+                }
+            }, CancellationToken.None);
+
+            var timerTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!internalCts.IsCancellationRequested)
+                    {
+                        await clock.Delay(interval, internalCts.Token).ConfigureAwait(false);
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.Tick(), internalCts.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                {
+                }
+            }, CancellationToken.None);
+
+            var buffer = new List<T>(maxCount ?? 16);
+            try
+            {
+                while (true)
+                {
+                    TimedSignal<T> signal;
+                    try
+                    {
+                        signal = await signalChannel.Reader.ReadAsync(ct).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    switch (signal.Kind)
+                    {
+                        case TimedSignalKind.Item:
+                            buffer.Add(signal.Item!);
                             if (maxCount.HasValue && buffer.Count >= maxCount.Value)
                             {
                                 await emitter.EmitAsync(buffer).ConfigureAwait(false);
                                 buffer = new List<T>(maxCount ?? 16);
                             }
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
-                catch (Exception ex)
-                {
-                    emitter.Fail(ex);
-                }
-                finally
-                {
-                    internalCts.Cancel();
-                    if (buffer.Count > 0 && !ct.IsCancellationRequested)
-                    {
-                        try { await emitter.EmitAsync(buffer).ConfigureAwait(false); } catch { }
+                            break;
+
+                        case TimedSignalKind.Tick:
+                            if (buffer.Count > 0)
+                            {
+                                await emitter.EmitAsync(buffer).ConfigureAwait(false);
+                                buffer = new List<T>(maxCount ?? 16);
+                            }
+                            break;
+
+                        case TimedSignalKind.SourceCompleted:
+                            if (buffer.Count > 0)
+                            {
+                                await emitter.EmitAsync(buffer).ConfigureAwait(false);
+                            }
+                            return;
+
+                        case TimedSignalKind.SourceFault:
+                            emitter.Fail(signal.Error!);
+                            return;
                     }
                 }
             }
             finally
             {
-                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
-                await scope.DisposeAsync().ConfigureAwait(false);
-                emitter.Complete();
+                await internalCts.CancelAsync().ConfigureAwait(false);
+                signalChannel.Writer.TryComplete();
+                try { await sourceTask.ConfigureAwait(false); } catch { }
+                try { await timerTask.ConfigureAwait(false); } catch { }
             }
         }).Named(source.Name ?? "");
     }
@@ -536,84 +576,106 @@ public static class TimeseriesExtensions
         return Stream.Create<T>(async (emitter, ct) =>
         {
             var clock = source.Clock;
-            var channel = Channel.CreateUnbounded<object?>();
-            var tick = new object();
-
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var scope = new StreamScope(internalCts.Token);
-            try
+            var signalChannel = Channel.CreateBounded<TimedSignal<T>>(new BoundedChannelOptions(1)
             {
-                // Timer
-                scope.Run(async innerCt =>
-                {
-                    try
-                    {
-                        while (!innerCt.IsCancellationRequested)
-                        {
-                            await clock.Delay(interval, innerCt).ConfigureAwait(false);
-                            channel.Writer.TryWrite(tick);
-                        }
-                    }
-                    catch (OperationCanceledException) { }
-                });
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
 
-                // Source
-                scope.Run(async innerCt =>
-                {
-                    try
-                    {
-                        await foreach (var item in source.WithCancellation(innerCt).ConfigureAwait(false))
-                        {
-                            channel.Writer.TryWrite(item);
-                        }
-                    }
-                    finally
-                    {
-                        channel.Writer.TryComplete();
-                    }
-                });
-
-                T? latestItem = default;
-                bool hasItem = false;
+            var sourceTask = Task.Run(async () =>
+            {
                 try
                 {
-                    await foreach (var itemOrTick in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                    await foreach (var item in source.WithCancellation(internalCts.Token).ConfigureAwait(false))
                     {
-                        if (ReferenceEquals(itemOrTick, tick))
-                        {
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.FromItem(item), internalCts.Token).ConfigureAwait(false);
+                    }
+
+                    await signalChannel.Writer.WriteAsync(TimedSignal<T>.SourceCompleted(), internalCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.SourceFault(ex), internalCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                    {
+                    }
+                }
+            }, CancellationToken.None);
+
+            var timerTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!internalCts.IsCancellationRequested)
+                    {
+                        await clock.Delay(interval, internalCts.Token).ConfigureAwait(false);
+                        await signalChannel.Writer.WriteAsync(TimedSignal<T>.Tick(), internalCts.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (internalCts.IsCancellationRequested)
+                {
+                }
+            }, CancellationToken.None);
+
+            T? latestItem = default;
+            bool hasItem = false;
+            try
+            {
+                while (true)
+                {
+                    TimedSignal<T> signal;
+                    try
+                    {
+                        signal = await signalChannel.Reader.ReadAsync(ct).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    switch (signal.Kind)
+                    {
+                        case TimedSignalKind.Item:
+                            latestItem = signal.Item;
+                            hasItem = true;
+                            break;
+
+                        case TimedSignalKind.Tick:
                             if (hasItem)
                             {
                                 await emitter.EmitAsync(latestItem!).ConfigureAwait(false);
                                 hasItem = false;
                                 latestItem = default;
                             }
-                        }
-                        else
-                        {
-                            latestItem = (T)itemOrTick!;
-                            hasItem = true;
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
-                catch (Exception ex)
-                {
-                    emitter.Fail(ex);
-                }
-                finally
-                {
-                    internalCts.Cancel();
-                    if (hasItem && !ct.IsCancellationRequested)
-                    {
-                        try { await emitter.EmitAsync(latestItem!).ConfigureAwait(false); } catch { }
+                            break;
+
+                        case TimedSignalKind.SourceCompleted:
+                            if (hasItem)
+                            {
+                                await emitter.EmitAsync(latestItem!).ConfigureAwait(false);
+                            }
+                            return;
+
+                        case TimedSignalKind.SourceFault:
+                            emitter.Fail(signal.Error!);
+                            return;
                     }
                 }
             }
             finally
             {
-                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
-                await scope.DisposeAsync().ConfigureAwait(false);
-                emitter.Complete();
+                await internalCts.CancelAsync().ConfigureAwait(false);
+                signalChannel.Writer.TryComplete();
+                try { await sourceTask.ConfigureAwait(false); } catch { }
+                try { await timerTask.ConfigureAwait(false); } catch { }
             }
         }).Named(source.Name ?? "");
     }

@@ -668,6 +668,44 @@ public class TimeBasedOperatorTests
     }
 
     [Test]
+    public async Task BufferByTime_ShouldNotFlushOnSourceFailure()
+    {
+        var clock = new TestClock();
+        var source = Stream.Create<int>(async emitter =>
+        {
+            await emitter.EmitAsync(1);
+            throw new InvalidOperationException("boom");
+        });
+        var buffered = Stream.From<int>(source, clock).BufferByTime(TimeSpan.FromSeconds(1));
+
+        var subscriber = await TestSubscriber<IList<int>>.SubscribeAsync(buffered);
+
+        subscriber.AssertValueCount(0);
+        subscriber.AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("boom")));
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task BufferByTime_Cancellation_ShouldNotFlushPartialBuffer()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var buffered = Stream.From<int>(source, clock).BufferByTime(TimeSpan.FromSeconds(1));
+        using var cts = new CancellationTokenSource();
+
+        var subscribeTask = TestSubscriber<IList<int>>.SubscribeAsync(buffered, cts.Token);
+
+        source.Push(1);
+        await Task.Delay(50);
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNoError();
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
     public async Task Sample_ShouldEmitLatestItemInInterval()
     {
         var clock = new TestClock();
@@ -726,5 +764,43 @@ public class TimeBasedOperatorTests
 
         Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 1 }));
         subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Sample_ShouldNotFlushOnSourceFailure()
+    {
+        var clock = new TestClock();
+        var source = Stream.Create<int>(async emitter =>
+        {
+            await emitter.EmitAsync(1);
+            throw new InvalidOperationException("boom");
+        });
+        var sampled = Stream.From<int>(source, clock).Sample(TimeSpan.FromSeconds(1));
+
+        var subscriber = await TestSubscriber<int>.SubscribeAsync(sampled);
+
+        subscriber.AssertValueCount(0);
+        subscriber.AssertError<InvalidOperationException>(ex => Assert.That(ex.Message, Is.EqualTo("boom")));
+        subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task Sample_Cancellation_ShouldNotFlushLatestItem()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var sampled = Stream.From<int>(source, clock).Sample(TimeSpan.FromSeconds(1));
+        using var cts = new CancellationTokenSource();
+
+        var subscribeTask = TestSubscriber<int>.SubscribeAsync(sampled, cts.Token);
+
+        source.Push(1);
+        await Task.Delay(50);
+        await cts.CancelAsync();
+
+        var subscriber = await subscribeTask;
+        subscriber.AssertValueCount(0);
+        subscriber.AssertNoError();
+        subscriber.AssertNotComplete();
     }
 }

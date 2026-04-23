@@ -74,7 +74,7 @@ This is not just stylistic:
 - Task 3 can start after Task 1 if docs are updated to the final shipped behavior, but it will likely touch the same narrative files as Task 1.
 - Shared files likely to create merge conflicts are `src/Streamix/Extensions/TimeseriesExtensions.cs`, `README.md`, and `ARCHITECTURE.md`.
 
-## Task 1: Fix Processing-Time Operator Runtime Semantics
+## ✅ Task 1: Fix Processing-Time Operator Runtime Semantics
 
 ### Priority
 
