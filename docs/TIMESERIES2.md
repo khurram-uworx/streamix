@@ -1,4 +1,4 @@
-# Time Series 2
+# Time Series
 
 ## Purpose
 

@@ -85,6 +85,31 @@ Streamix is designed for high-performance asynchronous streaming with the follow
 - Watermark-Aware Windowing: Supports bounded out-of-order data processing by deriving a monotonic watermark (`maxObservedEventTimestamp - outOfOrderness`). Late events (timestamp <= watermark) are dropped, and windows are finalized once the watermark reaches the window's end.
 - Hot Stream Efficiency: `ConnectableStream<T>` (via `Publish()` or `Replay()`) manages a single underlying subscription for multiple downstream consumers, reducing redundant upstream work and resource consumption.
 
+## Time-Based Operator Semantics
+
+Current time-based support is intentionally narrow:
+
+- Event-time operators: `MapWithTimestamp`, `WindowByTime`, and `WindowBySession`
+- Processing-time operators: `Throttle`, `BufferByTime`, and `Sample`
+
+`BufferByTime(interval, maxCount)` uses a bounded internal coordination path so downstream slowness still propagates pressure back toward the source rather than being hidden behind an unbounded queue.
+
+- A buffer is emitted when the interval elapses and the current buffer is non-empty.
+- A buffer is emitted early when `maxCount` is reached.
+- On successful upstream completion, a trailing non-empty buffer is emitted once, then the operator completes.
+- On upstream failure, no synthetic final buffer is emitted; the error is propagated.
+- On cancellation, partial buffered state is discarded and the operator does not complete successfully.
+
+`Sample(interval)` also uses bounded coordination and emits at most one value per interval.
+
+- Each tick emits the most recently observed item since the previous tick, if any.
+- Intervals with no observed items emit nothing.
+- On successful upstream completion, the latest observed item is emitted once if one is pending, then the operator completes.
+- On upstream failure, no final sampled item is emitted; the error is propagated.
+- On cancellation, pending latest state is discarded and the operator does not complete successfully.
+
+These processing-time operators are intentionally wall-clock based through the stream clock and are separate from event-time semantics such as timestamps, watermarks, lateness, and session formation.
+
 ## Boundary Semantics
 
 - `ToDictionaryAsync(...)` follows .NET `Dictionary` semantics and throws on duplicate keys.

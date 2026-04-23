@@ -1,4 +1,4 @@
-# EF Stream 2
+# EF Stream
 
 ## Purpose
 

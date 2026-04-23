@@ -63,7 +63,7 @@ var result = await (
 ).ToListAsync();
 ```
 
-Streamix supports event-time windowing with tumbling and sliding windows.
+Streamix supports both event-time windowing and narrow processing-time operators.
 
 ```csharp
 await sensorStream
@@ -73,6 +73,16 @@ await sensorStream
         slide: TimeSpan.FromMinutes(1),
         outOfOrderness: TimeSpan.FromSeconds(30))
     .FlatMap(window => window.MaxAsync(s => s.Value))
+    .ForEachAsync(Console.WriteLine);
+```
+
+```csharp
+await metricsStream
+    .BufferByTime(TimeSpan.FromSeconds(1), maxCount: 100)
+    .ForEachAsync(batch => Console.WriteLine($"Batch size: {batch.Count}"));
+
+await stateStream
+    .Sample(TimeSpan.FromMilliseconds(250))
     .ForEachAsync(Console.WriteLine);
 ```
 
@@ -129,11 +139,10 @@ EF-specific batching or paging helpers are not currently part of the contract; t
 
 ## Status
 
-Streamix is currently in active development. Core features including structured concurrency, time-series windowing, and channel-backed execution boundaries are implemented and verified.
+Streamix is currently in active development. Core features including structured concurrency, event-time windowing, `BufferByTime`, `Sample`, and channel-backed execution boundaries are implemented and verified.
 
 **Roadmap**
 
-- Additional time-based operators
 - Source generators for optimized pipelines
 
 ## Contributing
