@@ -1,6 +1,6 @@
+using Streamix.Implementations;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using Streamix.Implementations;
 
 namespace Streamix;
 

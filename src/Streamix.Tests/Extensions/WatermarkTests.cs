@@ -83,7 +83,7 @@ public class WatermarkTests
 
         var windowStreams = await windows.ToListAsync();
         var windowList = new List<List<Timestamped<int>>>();
-        foreach(var w in windowStreams) windowList.Add(await w.ToListAsync());
+        foreach (var w in windowStreams) windowList.Add(await w.ToListAsync());
 
         Assert.That(windowList, Has.Count.EqualTo(2));
         Assert.That(windowList[0].Select(x => x.Value), Is.EquivalentTo(new[] { 1 }));

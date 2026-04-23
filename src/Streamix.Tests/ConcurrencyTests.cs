@@ -421,7 +421,8 @@ public class ConcurrencyTests
         }), maxConcurrency: 3);
 
         // Assert
-        var ex = Assert.ThrowsAsync<Exception>(async () => {
+        var ex = Assert.ThrowsAsync<Exception>(async () =>
+        {
             await foreach (var item in stream)
             {
                 // Consume
@@ -500,7 +501,8 @@ public class ConcurrencyTests
         }, maxConcurrency: 5);
 
         // Assert
-        Assert.ThrowsAsync<Exception>(async () => await stream.ForEachAsync(i => {
+        Assert.ThrowsAsync<Exception>(async () => await stream.ForEachAsync(i =>
+        {
             lock (yieldedItems) yieldedItems.Add(i);
         }));
 
