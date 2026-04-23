@@ -241,7 +241,7 @@ Coding agents implementing Task 2 should be able to apply the following rules di
 - `ARCHITECTURE.md`
 - `README.md`
 
-## Task 2: Implement Watermark-Aware Event-Time Behavior
+## ✅ Task 2: Implement Watermark-Aware Event-Time Behavior
 
 ### Priority
 
