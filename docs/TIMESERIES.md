@@ -287,7 +287,7 @@ Once the semantic model is defined, the runtime and tests need to prove that out
 - `ARCHITECTURE.md`
 - `README.md`
 
-## Task 3: Design And Implement Session Windows
+## ✅ Task 3: Design And Implement Session Windows
 
 ### Priority
 
@@ -301,25 +301,38 @@ Introduce session windows only if the repo can define clear dynamic-gap semantic
 
 Session windows are a natural next step for time-series work, but they differ enough from fixed windows that they need their own semantics, API shape, and test strategy.
 
-### Decision required
+### 🎯 Task 3 decision
 
-Decide how session gaps are configured and when sessions merge, extend, and close.
+Task 3 is complete. Session windows are implemented with support for both in-order and watermark-aware merging semantics.
 
-### Scope
+### Canonical session semantics
 
-- define session-window semantics and API shape
-- implement the operator if the design is approved
-- add tests for merge behavior, gap boundaries, cancellation, and slow consumers
+- A session is defined by a maximum gap of inactivity between events.
+- A session's range is `[minTimestamp, maxTimestamp]`.
+- An event with `timestamp` belongs to a session if it falls within the session's influence range: `[minTimestamp - gap, maxTimestamp + gap]`.
 
-### Constraints
+### Ordered mode (outOfOrderness is null)
 
-- keep the public API minimal
-- do not ship ambiguous session-merge behavior
+- Optimized for mostly in-order data.
+- Emits session streams immediately upon the first event of a session.
+- A session is extended as long as incoming events arrive within `gap` of the current session's boundaries.
+- If an event arrives outside the `gap`, the current session is completed and a new one starts.
+- This mode allows for low-latency processing of sessions as they happen.
 
-### Suggested implementation path
+### Watermark-aware mode (outOfOrderness is provided)
 
-- start with a design-first task if the semantic space is still unclear
-- implement only after gap and merge behavior are fully specified
+- Supports late and out-of-order data with session merging.
+- Emits only final, completed session contents to satisfy the "observe only final window contents" contract from Task 1.
+- A session is considered finalized and emitted when `watermark >= session.maxTimestamp + gap`.
+- **Merging**: If a new event bridges the gap between two active sessions, or extends an existing one, the affected sessions and the new event are merged into a single session.
+- **Lateness**: Events arriving after the watermark (`event.timestamp <= watermark`) are dropped.
+- **Ordering**: Sessions are emitted in chronological order based on their start times. Items within a session are sorted by timestamp before emission.
+
+### Implementation and API
+
+- Operator: `WindowBySession(gap, capacity, mode, outOfOrderness)`
+- Respects standard backpressure (`capacity`, `mode`) and `CancellationToken`.
+- On upstream completion, all remaining active sessions are flushed immediately.
 
 ### Acceptance criteria
 

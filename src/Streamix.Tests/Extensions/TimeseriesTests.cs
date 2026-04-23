@@ -475,4 +475,152 @@ public class TimeseriesTests
         Assert.CatchAsync<OperationCanceledException>(async () => await itemsEnumerator.MoveNextAsync());
         Assert.That(await tcs.Task, Is.True);
     }
+
+    [Test]
+    public async Task WindowBySession_Ordered_ShouldGroupAndExtend()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var gap = TimeSpan.FromMinutes(10);
+
+        var items = new[]
+        {
+            Timestamped.Create(1, start.AddMinutes(1)),
+            Timestamped.Create(2, start.AddMinutes(5)),   // Extends session 1
+            Timestamped.Create(3, start.AddMinutes(20)),  // New session 2
+            Timestamped.Create(4, start.AddMinutes(25)),  // Extends session 2
+            Timestamped.Create(5, start.AddMinutes(40)),  // New session 3
+        };
+
+        var source = Stream.From(items);
+        var windows = source.WindowBySession(gap);
+
+        var windowStreams = await windows.ToListAsync();
+        var windowList = new List<List<int>>();
+        foreach (var window in windowStreams)
+        {
+            windowList.Add(await window.Map(x => x.Value).ToListAsync());
+        }
+
+        Assert.That(windowList, Has.Count.EqualTo(3));
+        Assert.That(windowList[0], Is.EquivalentTo(new[] { 1, 2 }));
+        Assert.That(windowList[1], Is.EquivalentTo(new[] { 3, 4 }));
+        Assert.That(windowList[2], Is.EquivalentTo(new[] { 5 }));
+    }
+
+    [Test]
+    public async Task WindowBySession_Ordered_ShouldHandleBackwardItemsWithinGap()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var gap = TimeSpan.FromMinutes(10);
+
+        var items = new[]
+        {
+            Timestamped.Create(1, start.AddMinutes(10)),
+            Timestamped.Create(2, start.AddMinutes(5)),   // Backward but within gap
+            Timestamped.Create(3, start.AddMinutes(1)),   // Backward but within gap
+            Timestamped.Create(4, start.AddMinutes(20)),  // Forward but within gap of original max
+        };
+
+        var source = Stream.From(items);
+        var windows = source.WindowBySession(gap);
+
+        var windowStreams = await windows.ToListAsync();
+        var windowList = new List<List<int>>();
+        foreach (var window in windowStreams)
+        {
+            windowList.Add(await window.Map(x => x.Value).ToListAsync());
+        }
+
+        Assert.That(windowList, Has.Count.EqualTo(1));
+        Assert.That(windowList[0], Is.EquivalentTo(new[] { 1, 2, 3, 4 }));
+    }
+
+    [Test]
+    public async Task WindowBySession_Watermark_ShouldMergeAndEmitFinalized()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var gap = TimeSpan.FromMinutes(10);
+        var outOfOrderness = TimeSpan.FromMinutes(5);
+
+        var items = new[]
+        {
+            Timestamped.Create(1, start.AddMinutes(1)),
+            Timestamped.Create(2, start.AddMinutes(25)), // max=25, wm=20. S1 finalized (20 >= 1+10). S2=[25,25]
+            Timestamped.Create(3, start.AddMinutes(50)), // max=50, wm=45. S2 finalized (45 >= 25+10). S3=[50,50]
+        };
+
+        var source = Stream.From(items);
+        var windows = source.WindowBySession(gap, outOfOrderness: outOfOrderness);
+
+        var windowStreams = await windows.ToListAsync();
+        var windowList = new List<List<int>>();
+        foreach (var window in windowStreams)
+        {
+            windowList.Add(await window.Map(x => x.Value).ToListAsync());
+        }
+
+        Assert.That(windowList, Has.Count.EqualTo(3));
+        Assert.That(windowList[0], Is.EquivalentTo(new[] { 1 }));
+        Assert.That(windowList[1], Is.EquivalentTo(new[] { 2 }));
+        Assert.That(windowList[2], Is.EquivalentTo(new[] { 3 }));
+    }
+
+    [Test]
+    public async Task WindowBySession_Watermark_ShouldMergeSessions()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var gap = TimeSpan.FromMinutes(10);
+        var outOfOrderness = TimeSpan.FromMinutes(20); // Large out-of-orderness to keep sessions active
+
+        var items = new[]
+        {
+            Timestamped.Create(1, start.AddMinutes(1)),  // S1: [1, 1]
+            Timestamped.Create(2, start.AddMinutes(20)), // S2: [20, 20], Watermark: 0
+            Timestamped.Create(3, start.AddMinutes(10)), // Bridges S1 and S2 -> S3: [1, 20]
+        };
+
+        var source = Stream.From(items);
+        var windows = source.WindowBySession(gap, outOfOrderness: outOfOrderness);
+
+        var windowStreams = await windows.ToListAsync();
+        var windowList = new List<List<int>>();
+        foreach (var window in windowStreams)
+        {
+            windowList.Add(await window.Map(x => x.Value).ToListAsync());
+        }
+
+        // All merged into one because of item 3
+        Assert.That(windowList, Has.Count.EqualTo(1));
+        Assert.That(windowList[0], Is.EqualTo(new[] { 1, 3, 2 })); // Ordered by timestamp
+    }
+
+    [Test]
+    public async Task WindowBySession_Watermark_ShouldDropLateEvents()
+    {
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var gap = TimeSpan.FromMinutes(10);
+        var outOfOrderness = TimeSpan.FromMinutes(5);
+
+        var items = new[]
+        {
+            Timestamped.Create(1, start.AddMinutes(20)), // Watermark: 15
+            Timestamped.Create(2, start.AddMinutes(10)), // Late! (10 <= 15)
+            Timestamped.Create(3, start.AddMinutes(40)), // Watermark: 35. New session
+        };
+
+        var source = Stream.From(items);
+        var windows = source.WindowBySession(gap, outOfOrderness: outOfOrderness);
+
+        var windowStreams = await windows.ToListAsync();
+        var windowList = new List<List<int>>();
+        foreach (var window in windowStreams)
+        {
+            windowList.Add(await window.Map(x => x.Value).ToListAsync());
+        }
+
+        Assert.That(windowList, Has.Count.EqualTo(2));
+        Assert.That(windowList[0], Is.EquivalentTo(new[] { 1 }));
+        Assert.That(windowList[1], Is.EquivalentTo(new[] { 3 }));
+        // Item 2 is nowhere
+    }
 }

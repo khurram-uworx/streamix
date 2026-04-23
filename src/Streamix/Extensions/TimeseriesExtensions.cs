@@ -239,4 +239,187 @@ public static class TimeseriesExtensions
             }
         });
     }
+
+    /// <summary>
+    /// Groups elements of a stream into session windows based on their timestamps and a gap of inactivity.
+    /// </summary>
+    /// <typeparam name="T">The type of items in the stream.</typeparam>
+    /// <param name="source">The source stream of timestamped items.</param>
+    /// <param name="gap">The maximum gap of inactivity between elements in a session.</param>
+    /// <param name="capacity">The capacity of the buffer for each window.</param>
+    /// <param name="mode">The backpressure mode for each window.</param>
+    /// <param name="outOfOrderness">The maximum out-of-orderness allowed before an event is considered late. If not null, enables watermark-aware behavior and session merging.</param>
+    /// <returns>A stream of session window streams.</returns>
+    public static IStream<IStream<Timestamped<T>>> WindowBySession<T>(
+        this IStream<Timestamped<T>> source,
+        TimeSpan gap,
+        int capacity = 16,
+        ChannelBackpressureMode mode = ChannelBackpressureMode.Wait,
+        TimeSpan? outOfOrderness = null)
+    {
+        if (gap <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(gap));
+        if (outOfOrderness.HasValue && outOfOrderness.Value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(outOfOrderness));
+
+        return Stream.Create<IStream<Timestamped<T>>>(async emitter =>
+        {
+            var ct = emitter.CancellationToken;
+
+            if (!outOfOrderness.HasValue)
+            {
+                // Ordered/Sequential session logic
+                Channel<Timestamped<T>>? currentSessionChannel = null;
+                long? sessionMinTicks = null;
+                long? sessionMaxTicks = null;
+
+                try
+                {
+                    await foreach (var item in source.WithCancellation(ct))
+                    {
+                        var itemTicks = item.Timestamp.UtcTicks;
+
+                        if (currentSessionChannel == null || itemTicks > sessionMaxTicks + gap.Ticks || itemTicks < sessionMinTicks - gap.Ticks)
+                        {
+                            // New session
+                            currentSessionChannel?.Writer.TryComplete();
+
+                            currentSessionChannel = ChannelExecution.CreateChannel<Timestamped<T>>(capacity, mode, singleWriter: true);
+                            sessionMinTicks = itemTicks;
+                            sessionMaxTicks = itemTicks;
+
+                            var channelToEmit = currentSessionChannel;
+                            await emitter.EmitAsync(Stream.From(innerCt => channelToEmit.Reader.ReadAllAsync(innerCt)));
+                        }
+                        else
+                        {
+                            // Extend current session
+                            if (itemTicks < sessionMinTicks) sessionMinTicks = itemTicks;
+                            if (itemTicks > sessionMaxTicks) sessionMaxTicks = itemTicks;
+                        }
+
+                        await ChannelExecution.WriteAsync(currentSessionChannel.Writer, item, mode, ct);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+                catch (Exception ex)
+                {
+                    currentSessionChannel?.Writer.TryComplete(ex);
+                    throw;
+                }
+                finally
+                {
+                    currentSessionChannel?.Writer.TryComplete();
+                }
+            }
+            else
+            {
+                // Watermark-aware session logic with merging
+                var activeSessions = new List<SessionState<T>>();
+                long? maxObservedTicks = null;
+
+                try
+                {
+                    await foreach (var item in source.WithCancellation(ct))
+                    {
+                        var itemTicks = item.Timestamp.UtcTicks;
+                        var currentWatermark = maxObservedTicks.HasValue ? maxObservedTicks.Value - outOfOrderness.Value.Ticks : long.MinValue;
+
+                        if (itemTicks <= currentWatermark)
+                            continue;
+
+                        if (!maxObservedTicks.HasValue || itemTicks > maxObservedTicks.Value)
+                            maxObservedTicks = itemTicks;
+
+                        var newWatermark = maxObservedTicks.Value - outOfOrderness.Value.Ticks;
+
+                        // Find overlapping sessions
+                        var overlapping = new List<SessionState<T>>();
+                        var nonOverlapping = new List<SessionState<T>>();
+
+                        foreach (var session in activeSessions)
+                        {
+                            // Overlap if item is within gap of session range [min, max]
+                            // i.e., itemTicks >= session.Min - gap AND itemTicks <= session.Max + gap
+                            if (itemTicks >= session.MinTicks - gap.Ticks && itemTicks <= session.MaxTicks + gap.Ticks)
+                            {
+                                overlapping.Add(session);
+                            }
+                            else
+                            {
+                                nonOverlapping.Add(session);
+                            }
+                        }
+
+                        if (overlapping.Count == 0)
+                        {
+                            // Create new session
+                            var newSession = new SessionState<T>(itemTicks, itemTicks);
+                            newSession.Items.Add(item);
+                            nonOverlapping.Add(newSession);
+                        }
+                        else
+                        {
+                            // Merge all overlapping into one
+                            var mergedMin = Math.Min(itemTicks, overlapping.Min(s => s.MinTicks));
+                            var mergedMax = Math.Max(itemTicks, overlapping.Max(s => s.MaxTicks));
+                            var mergedSession = new SessionState<T>(mergedMin, mergedMax);
+
+                            foreach (var s in overlapping)
+                            {
+                                mergedSession.Items.AddRange(s.Items);
+                            }
+                            mergedSession.Items.Add(item);
+                            // Sort items to ensure final stream is ordered
+                            mergedSession.Items.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp));
+
+                            nonOverlapping.Add(mergedSession);
+                        }
+
+                        activeSessions = nonOverlapping;
+
+                        // Emit and remove finalized sessions
+                        var sessionsToEmit = new List<SessionState<T>>();
+                        for (int i = activeSessions.Count - 1; i >= 0; i--)
+                        {
+                            var session = activeSessions[i];
+                            if (newWatermark >= session.MaxTicks + gap.Ticks)
+                            {
+                                sessionsToEmit.Add(session);
+                                activeSessions.RemoveAt(i);
+                            }
+                        }
+
+                        // Emit in chronological order
+                        foreach (var session in sessionsToEmit.OrderBy(s => s.MinTicks))
+                        {
+                            await emitter.EmitAsync(Stream.From(session.Items.OrderBy(x => x.Timestamp).AsEnumerable()));
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+                finally
+                {
+                    // Flush remaining sessions
+                    activeSessions.Sort((a, b) => a.MinTicks.CompareTo(b.MinTicks));
+                    foreach (var session in activeSessions)
+                    {
+                        await emitter.EmitAsync(Stream.From(session.Items.OrderBy(x => x.Timestamp).AsEnumerable()));
+                    }
+                    activeSessions.Clear();
+                }
+            }
+        });
+    }
+
+    private class SessionState<T>
+    {
+        public long MinTicks { get; set; }
+        public long MaxTicks { get; set; }
+        public List<Timestamped<T>> Items { get; } = new();
+
+        public SessionState(long min, long max)
+        {
+            MinTicks = min;
+            MaxTicks = max;
+        }
+    }
 }
