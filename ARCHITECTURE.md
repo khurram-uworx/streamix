@@ -67,6 +67,16 @@ Streamix uses a unified supervision model for both structured concurrency (`Stre
 - Caller-owned `DbContext` overloads are intentionally excluded so that subscription ownership, disposal, and same-context execution rules stay explicit and safe.
 - EF-specific batching or paging helpers are intentionally deferred until real usage shows a gap that the buffered-versus-streamed choice plus existing Streamix operators does not address well.
 
+## Time-Series and Watermarking
+
+Streamix supports event-time processing with watermark-aware windowing.
+
+- **Watermark Definition**: A watermark is a monotonic event-time cutoff derived from observed event timestamps: `watermark = maxObservedEventTimestamp - outOfOrderness`.
+- **Late Events**: An event is considered late if its timestamp is less than or equal to the current watermark. Late events are dropped from the main windowed output.
+- **Window Completion**: A window is considered complete and emitted when the watermark reaches or exceeds the window's end boundary.
+- **Tumbling and Sliding Windows**: Both window types support watermark-aware processing via the `outOfOrderness` parameter.
+- **Deterministic Finalization**: When the upstream source completes, all remaining open windows are finalized and emitted immediately, regardless of the current watermark.
+
 ## Implementation Notes
 
 - Channels for flow control

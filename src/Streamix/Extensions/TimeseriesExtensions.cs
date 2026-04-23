@@ -29,20 +29,107 @@ public static class TimeseriesExtensions
     /// <param name="slide">The interval at which windows are started. If null, tumbling windows are used (slide = duration).</param>
     /// <param name="capacity">The capacity of the buffer for each window.</param>
     /// <param name="mode">The backpressure mode for each window.</param>
+    /// <param name="outOfOrderness">The maximum duration by which events can be out of order. If specified, watermark-aware processing is enabled.</param>
     /// <returns>A stream of window streams.</returns>
     public static IStream<IStream<Timestamped<T>>> WindowByTime<T>(
         this IStream<Timestamped<T>> source,
         TimeSpan duration,
         TimeSpan? slide = null,
         int capacity = 16,
-        ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+        ChannelBackpressureMode mode = ChannelBackpressureMode.Wait,
+        TimeSpan? outOfOrderness = null)
     {
         if (duration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(duration));
         if (slide.HasValue && slide.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(slide));
+        if (outOfOrderness.HasValue && outOfOrderness.Value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(outOfOrderness));
 
         return Stream.Create<IStream<Timestamped<T>>>(async emitter =>
         {
             var ct = emitter.CancellationToken;
+
+            if (outOfOrderness.HasValue)
+            {
+                var ooo = outOfOrderness.Value;
+                var effectiveSlide = slide ?? duration;
+                var activeWindows = new SortedDictionary<long, Channel<Timestamped<T>>>();
+                long? maxObservedTicks = null;
+
+                try
+                {
+                    await foreach (var item in source.WithCancellation(ct))
+                    {
+                        if (maxObservedTicks.HasValue)
+                        {
+                            var watermarkTicks = maxObservedTicks.Value - ooo.Ticks;
+                            if (item.Timestamp.UtcTicks <= watermarkTicks)
+                            {
+                                continue; // Late event, drop
+                            }
+                        }
+
+                        // Identify windows this item belongs to
+                        // Window starts at s where s is multiple of effectiveSlide
+                        // s <= item.Timestamp < s + duration
+                        var latestStartTicks = (item.Timestamp.UtcTicks / effectiveSlide.Ticks) * effectiveSlide.Ticks;
+                        var windowsToCreate = new List<long>();
+                        for (var s = latestStartTicks; s > item.Timestamp.UtcTicks - duration.Ticks; s -= effectiveSlide.Ticks)
+                        {
+                            if (s < 0) break;
+                            if (!activeWindows.ContainsKey(s)) windowsToCreate.Add(s);
+                        }
+                        windowsToCreate.Reverse();
+
+                        foreach (var s in windowsToCreate)
+                        {
+                            var channel = ChannelExecution.CreateChannel<Timestamped<T>>(capacity, mode, singleWriter: true);
+                            activeWindows[s] = channel;
+                            await emitter.EmitAsync(Stream.From(innerCt => channel.Reader.ReadAllAsync(innerCt)));
+                        }
+
+                        for (var s = latestStartTicks; s > item.Timestamp.UtcTicks - duration.Ticks; s -= effectiveSlide.Ticks)
+                        {
+                            if (s < 0) break;
+                            await ChannelExecution.WriteAsync(activeWindows[s].Writer, item, mode, ct);
+                        }
+
+                        if (!maxObservedTicks.HasValue || item.Timestamp.UtcTicks > maxObservedTicks.Value)
+                        {
+                            maxObservedTicks = item.Timestamp.UtcTicks;
+                            var newWatermarkTicks = maxObservedTicks.Value - ooo.Ticks;
+
+                            var toRemove = new List<long>();
+                            foreach (var kvp in activeWindows)
+                            {
+                                if (kvp.Key + duration.Ticks <= newWatermarkTicks)
+                                {
+                                    kvp.Value.Writer.TryComplete();
+                                    toRemove.Add(kvp.Key);
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+                            foreach (var key in toRemove) activeWindows.Remove(key);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    foreach (var window in activeWindows.Values) window.Writer.TryComplete(ex);
+                    throw;
+                }
+                finally
+                {
+                    foreach (var window in activeWindows.Values) window.Writer.TryComplete();
+                    activeWindows.Clear();
+                }
+
+                return;
+            }
 
             if (slide == null || slide == duration)
             {
@@ -122,7 +209,6 @@ public static class TimeseriesExtensions
                         var effectiveMinStart = Math.Max(item.Timestamp.UtcTicks - duration.Ticks + 1, firstStartTicks.Value);
 
                         // Identify windows to create (in chronological order)
-
                         var windowsToCreate = new List<long>();
                         for (var s = latestStartTicks; s >= effectiveMinStart; s -= slide.Value.Ticks)
                         {

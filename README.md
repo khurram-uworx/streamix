@@ -63,12 +63,16 @@ var result = await (
 ).ToListAsync();
 ```
 
-Streamix supports event-time windowing with tumbling and sliding windows.
+Streamix supports event-time windowing with tumbling and sliding windows. It also supports watermark-aware processing for out-of-order data.
 
 ```csharp
 await sensorStream
     .MapWithTimestamp(s => s.ObservedAt)
-    .WindowByTime(duration: TimeSpan.FromMinutes(5), slide: TimeSpan.FromMinutes(1))
+    // Handle up to 30 seconds of out-of-orderness
+    .WindowByTime(
+        duration: TimeSpan.FromMinutes(5),
+        slide: TimeSpan.FromMinutes(1),
+        outOfOrderness: TimeSpan.FromSeconds(30))
     .FlatMap(window => window.MaxAsync(s => s.Value))
     .ForEachAsync(Console.WriteLine);
 ```
