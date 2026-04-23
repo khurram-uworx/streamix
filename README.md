@@ -68,7 +68,10 @@ Streamix supports event-time windowing with tumbling and sliding windows.
 ```csharp
 await sensorStream
     .MapWithTimestamp(s => s.ObservedAt)
-    .WindowByTime(duration: TimeSpan.FromMinutes(5), slide: TimeSpan.FromMinutes(1))
+    .WindowByTime(
+        duration: TimeSpan.FromMinutes(5),
+        slide: TimeSpan.FromMinutes(1),
+        outOfOrderness: TimeSpan.FromSeconds(30))
     .FlatMap(window => window.MaxAsync(s => s.Value))
     .ForEachAsync(Console.WriteLine);
 ```

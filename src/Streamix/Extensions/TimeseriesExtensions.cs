@@ -29,16 +29,19 @@ public static class TimeseriesExtensions
     /// <param name="slide">The interval at which windows are started. If null, tumbling windows are used (slide = duration).</param>
     /// <param name="capacity">The capacity of the buffer for each window.</param>
     /// <param name="mode">The backpressure mode for each window.</param>
+    /// <param name="outOfOrderness">The maximum out-of-orderness allowed before an event is considered late. If not null, enables watermark-aware behavior.</param>
     /// <returns>A stream of window streams.</returns>
     public static IStream<IStream<Timestamped<T>>> WindowByTime<T>(
         this IStream<Timestamped<T>> source,
         TimeSpan duration,
         TimeSpan? slide = null,
         int capacity = 16,
-        ChannelBackpressureMode mode = ChannelBackpressureMode.Wait)
+        ChannelBackpressureMode mode = ChannelBackpressureMode.Wait,
+        TimeSpan? outOfOrderness = null)
     {
         if (duration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(duration));
         if (slide.HasValue && slide.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(slide));
+        if (outOfOrderness.HasValue && outOfOrderness.Value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(outOfOrderness));
 
         return Stream.Create<IStream<Timestamped<T>>>(async emitter =>
         {
@@ -47,41 +50,98 @@ public static class TimeseriesExtensions
             if (slide == null || slide == duration)
             {
                 // Tumbling window logic
-                Channel<Timestamped<T>>? currentWindowChannel = null;
-                DateTimeOffset? currentWindowEnd = null;
-
-                try
+                if (outOfOrderness.HasValue)
                 {
-                    await foreach (var item in source.WithCancellation(ct))
+                    var activeWindows = new SortedDictionary<long, Channel<Timestamped<T>>>();
+                    long? maxObservedTicks = null;
+
+                    try
                     {
-                        if (currentWindowChannel == null || item.Timestamp >= currentWindowEnd)
+                        await foreach (var item in source.WithCancellation(ct))
                         {
-                            currentWindowChannel?.Writer.TryComplete();
+                            var currentWatermark = maxObservedTicks.HasValue ? maxObservedTicks.Value - outOfOrderness.Value.Ticks : long.MinValue;
+
+                            if (item.Timestamp.UtcTicks <= currentWatermark)
+                                continue;
+
+                            if (!maxObservedTicks.HasValue || item.Timestamp.UtcTicks > maxObservedTicks.Value)
+                                maxObservedTicks = item.Timestamp.UtcTicks;
+
+                            var newWatermark = maxObservedTicks.Value - outOfOrderness.Value.Ticks;
+
+                            // Clean up
+                            while (activeWindows.Count > 0)
+                            {
+                                var first = activeWindows.First();
+                                if (first.Key + duration.Ticks <= newWatermark)
+                                {
+                                    first.Value.Writer.TryComplete();
+                                    activeWindows.Remove(first.Key);
+                                }
+                                else break;
+                            }
 
                             var startTicks = (item.Timestamp.UtcTicks / duration.Ticks) * duration.Ticks;
-                            var start = new DateTimeOffset(startTicks, TimeSpan.Zero);
-                            currentWindowEnd = start + duration;
+                            if (!activeWindows.TryGetValue(startTicks, out var channel))
+                            {
+                                channel = ChannelExecution.CreateChannel<Timestamped<T>>(capacity, mode, singleWriter: true);
+                                activeWindows[startTicks] = channel;
+                                await emitter.EmitAsync(Stream.From(innerCt => channel.Reader.ReadAllAsync(innerCt)));
+                            }
 
-                            var channel = ChannelExecution.CreateChannel<Timestamped<T>>(capacity, mode, singleWriter: true);
-                            currentWindowChannel = channel;
-
-                            await emitter.EmitAsync(Stream.From(innerCt => channel.Reader.ReadAllAsync(innerCt)));
+                            await ChannelExecution.WriteAsync(channel.Writer, item, mode, ct);
                         }
-
-                        await ChannelExecution.WriteAsync(currentWindowChannel.Writer, item, mode, ct);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+                    catch (Exception ex)
+                    {
+                        foreach (var window in activeWindows.Values) window.Writer.TryComplete(ex);
+                        throw;
+                    }
+                    finally
+                    {
+                        foreach (var window in activeWindows.Values) window.Writer.TryComplete();
+                        activeWindows.Clear();
                     }
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                else
                 {
-                }
-                catch (Exception ex)
-                {
-                    currentWindowChannel?.Writer.TryComplete(ex);
-                    throw;
-                }
-                finally
-                {
-                    currentWindowChannel?.Writer.TryComplete();
+                    Channel<Timestamped<T>>? currentWindowChannel = null;
+                    DateTimeOffset? currentWindowEnd = null;
+
+                    try
+                    {
+                        await foreach (var item in source.WithCancellation(ct))
+                        {
+                            if (currentWindowChannel == null || item.Timestamp >= currentWindowEnd)
+                            {
+                                currentWindowChannel?.Writer.TryComplete();
+
+                                var startTicks = (item.Timestamp.UtcTicks / duration.Ticks) * duration.Ticks;
+                                var start = new DateTimeOffset(startTicks, TimeSpan.Zero);
+                                currentWindowEnd = start + duration;
+
+                                var channel = ChannelExecution.CreateChannel<Timestamped<T>>(capacity, mode, singleWriter: true);
+                                currentWindowChannel = channel;
+
+                                await emitter.EmitAsync(Stream.From(innerCt => channel.Reader.ReadAllAsync(innerCt)));
+                            }
+
+                            await ChannelExecution.WriteAsync(currentWindowChannel.Writer, item, mode, ct);
+                        }
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        currentWindowChannel?.Writer.TryComplete(ex);
+                        throw;
+                    }
+                    finally
+                    {
+                        currentWindowChannel?.Writer.TryComplete();
+                    }
                 }
             }
             else
@@ -89,24 +149,36 @@ public static class TimeseriesExtensions
                 // Sliding window logic
                 var activeWindows = new SortedDictionary<long, Channel<Timestamped<T>>>();
                 long? firstStartTicks = null;
+                long? maxObservedTicks = null;
 
                 try
                 {
                     await foreach (var item in source.WithCancellation(ct))
                     {
+                        var currentWatermark = outOfOrderness.HasValue
+                            ? (maxObservedTicks.HasValue ? maxObservedTicks.Value - outOfOrderness.Value.Ticks : long.MinValue)
+                            : long.MinValue;
+
+                        if (outOfOrderness.HasValue && item.Timestamp.UtcTicks <= currentWatermark)
+                            continue;
+
+                        if (!maxObservedTicks.HasValue || item.Timestamp.UtcTicks > maxObservedTicks.Value)
+                            maxObservedTicks = item.Timestamp.UtcTicks;
+
+                        var effectiveWatermark = outOfOrderness.HasValue
+                            ? maxObservedTicks.Value - outOfOrderness.Value.Ticks
+                            : item.Timestamp.UtcTicks;
+
                         // Clean up expired windows
                         while (activeWindows.Count > 0)
                         {
                             var first = activeWindows.First();
-                            if (first.Key + duration.Ticks <= item.Timestamp.UtcTicks)
+                            if (first.Key + duration.Ticks <= effectiveWatermark)
                             {
                                 first.Value.Writer.TryComplete();
                                 activeWindows.Remove(first.Key);
                             }
-                            else
-                            {
-                                break;
-                            }
+                            else break;
                         }
 
                         var latestStartTicks = (item.Timestamp.UtcTicks / slide.Value.Ticks) * slide.Value.Ticks;
@@ -119,13 +191,17 @@ public static class TimeseriesExtensions
                                 firstStartTicks += slide.Value.Ticks;
                         }
 
-                        var effectiveMinStart = Math.Max(item.Timestamp.UtcTicks - duration.Ticks + 1, firstStartTicks.Value);
+                        var effectiveMinStart = outOfOrderness.HasValue
+                             ? (item.Timestamp.UtcTicks - duration.Ticks + 1)
+                             : Math.Max(item.Timestamp.UtcTicks - duration.Ticks + 1, firstStartTicks.Value);
 
                         // Identify windows to create (in chronological order)
-
                         var windowsToCreate = new List<long>();
                         for (var s = latestStartTicks; s >= effectiveMinStart; s -= slide.Value.Ticks)
                         {
+                            if (outOfOrderness.HasValue && s + duration.Ticks <= effectiveWatermark)
+                                break;
+
                             if (!activeWindows.ContainsKey(s)) windowsToCreate.Add(s);
                         }
                         windowsToCreate.Reverse();
