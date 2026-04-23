@@ -218,12 +218,14 @@ public static class Stream
     /// <summary>
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/> and <see cref="IClock"/>
     /// </summary>
-    public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock) => new StreamImplementation<T>(source, clock);
+    public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock)
+        => new StreamImplementation<T>(source, clock);
 
     /// <summary>
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>, <see cref="IClock"/> and name.
     /// </summary>
-    public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock, string? name) => new StreamImplementation<T>(source, clock, name);
+    public static IStream<T> From<T>(IAsyncEnumerable<T> source, IClock clock, string? name)
+        => new StreamImplementation<T>(source, clock, name);
 
     /// <summary>
     /// Creates a stream from an <see cref="IAsyncEnumerable{T}"/>.
@@ -256,7 +258,8 @@ public static class Stream
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="source">The source single-item stream.</param>
     /// <returns>A stream wrapping the source.</returns>
-    public static IStream<T> From<T>(ISingle<T> source) => new StreamImplementation<T>(source);
+    public static IStream<T> From<T>(ISingle<T> source)
+        => new StreamImplementation<T>(source);
 
     /// <summary>
     /// Creates a stream from a single value.
@@ -264,7 +267,8 @@ public static class Stream
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="value">The value to emit.</param>
     /// <returns>A stream that emits the specified value and then completes.</returns>
-    public static IStream<T> From<T>(T value) => From(AsyncEnumerable.Just(value));
+    public static IStream<T> From<T>(T value)
+        => From(AsyncEnumerable.Just(value));
 
     /// <summary>
     /// Creates a stream from an <see cref="IEnumerable{T}"/>.
@@ -272,7 +276,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="source">The source enumerable.</param>
     /// <returns>A stream wrapping the source.</returns>
-    public static IStream<T> From<T>(IEnumerable<T> source) => From(AsyncEnumerable.FromEnumerable(source));
+    public static IStream<T> From<T>(IEnumerable<T> source)
+        => From(AsyncEnumerable.FromEnumerable(source));
 
     /// <summary>
     /// Creates a stream from a params array of items.
@@ -280,7 +285,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="items">The items to emit.</param>
     /// <returns>A stream that emits the specified items and then completes.</returns>
-    public static IStream<T> From<T>(params T[] items) => From((IEnumerable<T>)items);
+    public static IStream<T> From<T>(params T[] items)
+        => From((IEnumerable<T>)items);
 
     /// <summary>
     /// Creates a stream from a factory function that returns an <see cref="IAsyncEnumerable{T}"/>.
@@ -289,7 +295,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="factory">The factory function to invoke.</param>
     /// <returns>A stream created from the factory function.</returns>
-    public static IStream<T> From<T>(Func<CancellationToken, IAsyncEnumerable<T>> factory) => From(AsyncEnumerable.DeferAsyncEnumerable(factory));
+    public static IStream<T> From<T>(Func<CancellationToken, IAsyncEnumerable<T>> factory)
+        => From(AsyncEnumerable.DeferAsyncEnumerable(factory));
 
     /// <summary>
     /// Creates a stream from a single value. Alias for <see cref="From{T}(T)"/>.
@@ -297,7 +304,8 @@ public static class Stream
     /// <typeparam name="T">The type of item in the stream.</typeparam>
     /// <param name="value">The value to emit.</param>
     /// <returns>A stream that emits the specified value and then completes.</returns>
-    public static IStream<T> Just<T>(T value) => From(value);
+    public static IStream<T> Just<T>(T value)
+        => From(value);
 
     /// <summary>
     /// Creates a stream from a <see cref="Task{T}"/>.
@@ -305,7 +313,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="task">The task to wrap.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(Task<T> task) => From(Single.From(task));
+    public static IStream<T> From<T>(Task<T> task)
+        => From(Single.From(task));
 
     /// <summary>
     /// Creates a stream from a function that returns a <see cref="Task{T}"/>.
@@ -314,7 +323,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="taskFactory">The function to invoke.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(Func<Task<T>> taskFactory) => From(Single.From(taskFactory));
+    public static IStream<T> From<T>(Func<Task<T>> taskFactory)
+        => From(Single.From(taskFactory));
 
     /// <summary>
     /// Creates a stream from a function that returns a <see cref="Task{T}"/> and accepts a <see cref="CancellationToken"/>.
@@ -324,7 +334,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="taskFactory">The function to invoke.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(Func<CancellationToken, Task<T>> taskFactory) => From(Single.From(taskFactory));
+    public static IStream<T> From<T>(Func<CancellationToken, Task<T>> taskFactory)
+        => From(Single.From(taskFactory));
 
     /// <summary>
     /// Creates a stream from a <see cref="ValueTask{T}"/>.
@@ -332,7 +343,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="task">The task to wrap.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(ValueTask<T> task) => From(Single.From(task));
+    public static IStream<T> From<T>(ValueTask<T> task)
+        => From(Single.From(task));
 
     /// <summary>
     /// Creates a stream from a function that returns a <see cref="ValueTask{T}"/>.
@@ -341,7 +353,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="taskFactory">The function to invoke.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(Func<ValueTask<T>> taskFactory) => From(Single.From(taskFactory));
+    public static IStream<T> From<T>(Func<ValueTask<T>> taskFactory)
+        => From(Single.From(taskFactory));
 
     /// <summary>
     /// Creates a stream from a function that returns a <see cref="ValueTask{T}"/> and accepts a <see cref="CancellationToken"/>.
@@ -351,14 +364,16 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="taskFactory">The function to invoke.</param>
     /// <returns>A stream that emits the result of the task and then completes.</returns>
-    public static IStream<T> From<T>(Func<CancellationToken, ValueTask<T>> taskFactory) => From(Single.From(taskFactory));
+    public static IStream<T> From<T>(Func<CancellationToken, ValueTask<T>> taskFactory)
+        => From(Single.From(taskFactory));
 
     /// <summary>
     /// Creates an empty stream.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <returns>An empty stream.</returns>
-    public static IStream<T> Empty<T>() => From(AsyncEnumerable.Empty<T>());
+    public static IStream<T> Empty<T>()
+        => From(AsyncEnumerable.Empty<T>());
 
     /// <summary>
     /// Creates a stream that fails with the specified exception.
@@ -366,7 +381,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="exception">The exception to fail with.</param>
     /// <returns>A failing stream.</returns>
-    public static IStream<T> Error<T>(Exception exception) => From(AsyncEnumerable.Error<T>(exception));
+    public static IStream<T> Error<T>(Exception exception)
+        => From(AsyncEnumerable.Error<T>(exception));
 
     /// <summary>
     /// Creates a stream that emits a range of sequential integers.
@@ -374,14 +390,16 @@ public static class Stream
     /// <param name="start">The value of the first integer in the sequence.</param>
     /// <param name="count">The number of sequential integers to generate.</param>
     /// <returns>A stream that contains a range of sequential integers.</returns>
-    public static IStream<int> Range(int start, int count) => From(AsyncEnumerable.Range(start, count));
+    public static IStream<int> Range(int start, int count)
+        => From(AsyncEnumerable.Range(start, count));
 
     /// <summary>
     /// Returns a stream that emits a sequential long integer every specified time interval.
     /// </summary>
     /// <param name="period">The time interval between emissions.</param>
     /// <returns>A stream that emits sequential long integers.</returns>
-    public static IStream<long> Interval(TimeSpan period) => Interval(period, period);
+    public static IStream<long> Interval(TimeSpan period)
+        => Interval(period, period);
 
     /// <summary>
     /// Returns a stream that emits a sequential long integer after an initial delay, and then every specified time interval.
@@ -389,22 +407,26 @@ public static class Stream
     /// <param name="dueTime">The initial delay before the first emission.</param>
     /// <param name="period">The time interval between subsequent emissions.</param>
     /// <returns>A stream that emits sequential long integers.</returns>
-    public static IStream<long> Interval(TimeSpan dueTime, TimeSpan period) => From(AsyncEnumerable.Interval(dueTime, period, SystemClock.Instance));
+    public static IStream<long> Interval(TimeSpan dueTime, TimeSpan period)
+        => From(AsyncEnumerable.Interval(dueTime, period, SystemClock.Instance));
 
     /// <summary>
     /// </summary>
-    public static IStream<long> Interval(TimeSpan dueTime, TimeSpan period, IClock clock) => From(AsyncEnumerable.Interval(dueTime, period, clock), clock);
+    public static IStream<long> Interval(TimeSpan dueTime, TimeSpan period, IClock clock)
+        => From(AsyncEnumerable.Interval(dueTime, period, clock), clock);
 
     /// <summary>
     /// Returns a stream that emits a single 0L after an initial delay and then completes.
     /// </summary>
     /// <param name="dueTime">The delay before emitting the item.</param>
     /// <returns>A stream that emits 0L after the delay.</returns>
-    public static IStream<long> FromTimer(TimeSpan dueTime) => From(AsyncEnumerable.FromTimer(dueTime, SystemClock.Instance));
+    public static IStream<long> FromTimer(TimeSpan dueTime)
+        => From(AsyncEnumerable.FromTimer(dueTime, SystemClock.Instance));
 
     /// <summary>
     /// </summary>
-    public static IStream<long> FromTimer(TimeSpan dueTime, IClock clock) => From(AsyncEnumerable.FromTimer(dueTime, clock), clock);
+    public static IStream<long> FromTimer(TimeSpan dueTime, IClock clock)
+        => From(AsyncEnumerable.FromTimer(dueTime, clock), clock);
 
     /// <summary>
     /// Returns a stream that emits the result of a polling function every specified time interval.
@@ -413,7 +435,8 @@ public static class Stream
     /// <param name="interval">The time interval between polling attempts.</param>
     /// <param name="poll">The function to invoke for each polling attempt.</param>
     /// <returns>A stream that emits the results of the polling function.</returns>
-    public static IStream<T> Poll<T>(TimeSpan interval, Func<CancellationToken, ValueTask<T>> poll) => Poll(interval, interval, poll);
+    public static IStream<T> Poll<T>(TimeSpan interval, Func<CancellationToken, ValueTask<T>> poll)
+        => Poll(interval, interval, poll);
 
     /// <summary>
     /// Returns a stream that emits the result of a polling function after an initial delay, and then every specified time interval.
@@ -423,18 +446,21 @@ public static class Stream
     /// <param name="period">The time interval between subsequent polling attempts.</param>
     /// <param name="poll">The function to invoke for each polling attempt.</param>
     /// <returns>A stream that emits the results of the polling function.</returns>
-    public static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll) => From(AsyncEnumerable.Poll(dueTime, period, poll, SystemClock.Instance));
+    public static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll)
+        => From(AsyncEnumerable.Poll(dueTime, period, poll, SystemClock.Instance));
 
     /// <summary>
     /// </summary>
-    public static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll, IClock clock) => From(AsyncEnumerable.Poll(dueTime, period, poll, clock), clock);
+    public static IStream<T> Poll<T>(TimeSpan dueTime, TimeSpan period, Func<CancellationToken, ValueTask<T>> poll, IClock clock)
+        => From(AsyncEnumerable.Poll(dueTime, period, poll, clock), clock);
 
     /// <summary>
     /// Creates a stream that never emits any items and never completes.
     /// </summary>
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <returns>A stream that never emits and never completes.</returns>
-    public static IStream<T> Never<T>() => From(AsyncEnumerable.Never<T>());
+    public static IStream<T> Never<T>()
+        => From(AsyncEnumerable.Never<T>());
 
     /// <summary>
     /// Creates a stream that reads all items from the specified <see cref="ChannelReader{T}"/>.
@@ -442,7 +468,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="reader">The channel reader to read from.</param>
     /// <returns>A stream that emits all items from the channel reader.</returns>
-    public static IStream<T> FromChannel<T>(ChannelReader<T> reader) => From(reader.ReadAllAsync());
+    public static IStream<T> FromChannel<T>(ChannelReader<T> reader)
+        => From(reader.ReadAllAsync());
 
     /// <summary>
     /// Creates a stream that reads all items from the specified <see cref="Channel{T}"/>.
@@ -450,7 +477,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="channel">The channel to read from.</param>
     /// <returns>A stream that emits all items from the channel.</returns>
-    public static IStream<T> FromChannel<T>(Channel<T> channel) => FromChannel(channel.Reader);
+    public static IStream<T> FromChannel<T>(Channel<T> channel)
+        => FromChannel(channel.Reader);
 
     /// <summary>
     /// Creates a stream that drains the current contents of a <see cref="Queue{T}"/>.
@@ -472,7 +500,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the channels.</typeparam>
     /// <param name="readers">The channel readers to merge.</param>
     /// <returns>A merged stream.</returns>
-    public static IStream<T> MergeChannels<T>(params ChannelReader<T>[] readers) => Merge(readers.Select(FromChannel).ToArray());
+    public static IStream<T> MergeChannels<T>(params ChannelReader<T>[] readers)
+        => Merge(readers.Select(FromChannel).ToArray());
 
     /// <summary>
     /// Merges multiple streams into one by combining their elements.
@@ -480,7 +509,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the streams.</typeparam>
     /// <param name="streams">The streams to merge.</param>
     /// <returns>A merged stream.</returns>
-    public static IStream<T> Merge<T>(params IStream<T>[] streams) => StreamImplementation<T>.Merge(streams);
+    public static IStream<T> Merge<T>(params IStream<T>[] streams)
+        => StreamImplementation<T>.Merge(streams);
 
     /// <summary>
     /// Combines elements from multiple streams using a specified function.
@@ -492,7 +522,8 @@ public static class Stream
     /// <param name="second">The second stream.</param>
     /// <param name="resultSelector">The result selector function.</param>
     /// <returns>A zipped stream.</returns>
-    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector) => StreamImplementation<TResult>.Zip(first, second, resultSelector);
+    public static IStream<TResult> Zip<T1, T2, TResult>(IStream<T1> first, IStream<T2> second, Func<T1, T2, TResult> resultSelector)
+        => StreamImplementation<TResult>.Zip(first, second, resultSelector);
 
     /// <summary>
     /// Returns a stream that is created by a factory function for each subscriber.
@@ -500,7 +531,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="factory">The factory function to create the stream.</param>
     /// <returns>A deferred stream.</returns>
-    public static IStream<T> Defer<T>(Func<IStream<T>> factory) => From(AsyncEnumerable.Defer<T>(_ => factory()));
+    public static IStream<T> Defer<T>(Func<IStream<T>> factory)
+        => From(AsyncEnumerable.Defer<T>(_ => factory()));
 
     /// <summary>
     /// Returns a stream that is created by a factory function for each subscriber, with access to the subscriber's cancellation token.
@@ -508,7 +540,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="factory">The factory function to create the stream.</param>
     /// <returns>A deferred stream.</returns>
-    public static IStream<T> Defer<T>(Func<CancellationToken, IStream<T>> factory) => From(AsyncEnumerable.Defer<T>(factory));
+    public static IStream<T> Defer<T>(Func<CancellationToken, IStream<T>> factory)
+        => From(AsyncEnumerable.Defer<T>(factory));
 
     /// <summary>
     /// Creates a stream by providing an emitter that can be used to push items, complete, or signal errors.
@@ -516,7 +549,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="producer">A function that uses the emitter to produce items.</param>
     /// <returns>A stream created from the emitter.</returns>
-    public static IStream<T> Create<T>(Func<IStreamEmitter<T>, Task> producer) => StreamImplementation<T>.Create(producer);
+    public static IStream<T> Create<T>(Func<IStreamEmitter<T>, Task> producer)
+        => StreamImplementation<T>.Create(producer);
 
     /// <summary>
     /// Creates a stream by providing an emitter that can be used to push items, complete, or signal errors.
@@ -525,7 +559,8 @@ public static class Stream
     /// <typeparam name="T">The type of items in the stream.</typeparam>
     /// <param name="producer">A function that uses the emitter to produce items.</param>
     /// <returns>A stream created from the emitter.</returns>
-    public static IStream<T> Create<T>(Func<IStreamEmitter<T>, CancellationToken, ValueTask> producer) => StreamImplementation<T>.Create(producer);
+    public static IStream<T> Create<T>(Func<IStreamEmitter<T>, CancellationToken, ValueTask> producer)
+        => StreamImplementation<T>.Create(producer);
 
     /// <summary>
     /// Creates a stream from an async callback or event source that can await item delivery and returns an <see cref="IDisposable"/> subscription.
@@ -583,9 +618,7 @@ public static class Stream
     /// <param name="resourceFactory">A factory function to create the resource.</param>
     /// <param name="streamFactory">A factory function to create the stream using the resource.</param>
     /// <returns>A stream that manages the resource lifetime.</returns>
-    public static IStream<T> Using<TResource, T>(
-        Func<TResource> resourceFactory,
-        Func<TResource, IStream<T>> streamFactory)
+    public static IStream<T> Using<TResource, T>(Func<TResource> resourceFactory, Func<TResource, IStream<T>> streamFactory)
         where TResource : IDisposable
         => From(AsyncEnumerable.Using(resourceFactory, streamFactory));
 

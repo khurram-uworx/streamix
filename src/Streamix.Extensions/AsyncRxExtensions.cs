@@ -16,18 +16,13 @@ public static class AsyncRxExtensions
         var subscription = await source.SubscribeAsync(
             async x => await channel.Writer.WriteAsync(x, cancellationToken),
             async ex => channel.Writer.TryComplete(ex),
-            async () => channel.Writer.TryComplete()
-        );
+            async () => channel.Writer.TryComplete());
 
         try
         {
             while (await channel.Reader.WaitToReadAsync(cancellationToken))
-            {
                 while (channel.Reader.TryRead(out var item))
-                {
                     yield return item;
-                }
-            }
 
             // Ensure any exception that completed the channel is rethrown
             await channel.Reader.Completion;
@@ -57,9 +52,7 @@ public static class AsyncRxExtensions
                 try
                 {
                     await foreach (var item in stream.WithCancellation(cts.Token))
-                    {
                         await observer.OnNextAsync(item);
-                    }
                     await observer.OnCompletedAsync();
                 }
                 catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
@@ -124,6 +117,7 @@ public static class AsyncRxExtensions
             return AsyncDisposable.Create(async () =>
             {
                 await cts.CancelAsync();
+
                 try
                 {
                     await runTask;
@@ -144,9 +138,7 @@ public static class AsyncRxExtensions
     /// <param name="source">The source asynchronous observable.</param>
     /// <returns>A stream that emits elements from the observable.</returns>
     public static IStream<T> ToStream<T>(this IAsyncObservable<T> source)
-    {
-        return Stream.From(toAsyncEnumerable(source));
-    }
+        => Stream.From(toAsyncEnumerable(source));
 
     /// <summary>
     /// Converts an <see cref="IAsyncObservable{T}"/> to an <see cref="ISingle{T}"/>.
@@ -155,7 +147,5 @@ public static class AsyncRxExtensions
     /// <param name="source">The source asynchronous observable.</param>
     /// <returns>A single-item stream that emits the first element from the observable.</returns>
     public static ISingle<T> ToSingle<T>(this IAsyncObservable<T> source)
-    {
-        return Single.From(toAsyncEnumerable(source));
-    }
+        => Single.From(toAsyncEnumerable(source));
 }

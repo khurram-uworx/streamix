@@ -27,10 +27,8 @@ public class StreamResult<T> : IActionResult
     /// Creates a StreamResult that streams items as Server-Sent Events.
     /// </summary>
     /// <param name="stream">The stream to serialize and send.</param>
-    public StreamResult(IStream<T> stream)
-        : this(stream, "text/event-stream", null)
-    {
-    }
+    public StreamResult(IStream<T> stream) : this(stream, "text/event-stream", null)
+    { }
 
     /// <summary>
     /// Creates a StreamResult with a custom content type and handler.
@@ -38,9 +36,7 @@ public class StreamResult<T> : IActionResult
     /// <param name="stream">The stream to process.</param>
     /// <param name="contentType">The Content-Type header value.</param>
     /// <param name="customHandler">Optional custom handler function. If not provided, uses SSE format.</param>
-    public StreamResult(
-        IStream<T> stream,
-        string contentType,
+    public StreamResult(IStream<T> stream, string contentType,
         Func<IStream<T>, HttpResponse, CancellationToken, Task>? customHandler = null)
     {
         this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
@@ -58,12 +54,8 @@ public class StreamResult<T> : IActionResult
         response.ContentType = contentType;
 
         if (customHandler != null)
-        {
             await customHandler(stream, response, context.HttpContext.RequestAborted);
-        }
         else
-        {
             await stream.ToSseAsync(response, context.HttpContext.RequestAborted);
-        }
     }
 }

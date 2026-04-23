@@ -8,9 +8,13 @@
 
 ## Repository map
 - `src/Streamix`: main production library targeting `net10.0`.
+- `src/Streamix.Extensions`: extension operators and helpers layered on the core library.
+- `src/Streamix.AspNetCore`: ASP.NET Core integration package.
+- `src/Streamix.Benchmarks`: benchmark project for performance exploration.
 - `src/Streamix.Tests`: NUnit test project covering library behavior.
 - `README.md`: product contract, examples, design principles, and roadmap.
 - `Streamix.slnx`: solution entry point.
+- `.github/workflows/ci.yml`: CI workflow for restore/build/test and coverage upload.
 
 ## Dev environment tips
 - Required SDK: .NET 10.
@@ -21,6 +25,10 @@
 - During iteration, targeted checks are fine when they meaningfully reduce cycle time:
   - `dotnet test src/Streamix.Tests/Streamix.Tests.csproj`
   - `dotnet test --filter <NameOrCategory>`
+- CI mirrors the root workflow with explicit step chaining:
+  - `dotnet restore`
+  - `dotnet build --no-restore --configuration Release`
+  - `dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"`
 - There are currently no known external service dependencies for the test suite.
 
 ## Agent workflow
@@ -43,6 +51,8 @@
 - Before handing off substantial changes, prefer running:
   - `dotnet build --configuration Release`
   - `dotnet test --configuration Release`
+- If you need to match CI locally, also run:
+  - `dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"`
 - If you cannot run validation, say so explicitly.
 
 ## Coding conventions

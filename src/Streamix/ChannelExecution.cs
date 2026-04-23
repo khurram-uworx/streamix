@@ -39,7 +39,20 @@ static class ChannelExecution
 {
     readonly record struct IndexedItem<T>(long Index, T Item);
 
-    public static int GetEffectiveCapacity(int capacity, ChannelBackpressureMode mode)
+    static BoundedChannelFullMode getFullMode(ChannelBackpressureMode mode)
+    {
+        return mode switch
+        {
+            ChannelBackpressureMode.Wait => BoundedChannelFullMode.Wait,
+            ChannelBackpressureMode.DropNewest => BoundedChannelFullMode.DropNewest,
+            ChannelBackpressureMode.DropOldest => BoundedChannelFullMode.DropOldest,
+            ChannelBackpressureMode.LatestOnly => BoundedChannelFullMode.DropOldest,
+            ChannelBackpressureMode.Fail => BoundedChannelFullMode.Wait,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        };
+    }
+
+    static int getEffectiveCapacity(int capacity, ChannelBackpressureMode mode)
     {
         if (capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than 0.");
@@ -49,10 +62,10 @@ static class ChannelExecution
 
     public static Channel<T> CreateChannel<T>(int capacity, ChannelBackpressureMode mode, bool singleWriter = false, bool singleReader = false)
     {
-        var effectiveCapacity = GetEffectiveCapacity(capacity, mode);
+        var effectiveCapacity = getEffectiveCapacity(capacity, mode);
         return Channel.CreateBounded<T>(new BoundedChannelOptions(effectiveCapacity)
         {
-            FullMode = GetFullMode(mode),
+            FullMode = getFullMode(mode),
             SingleWriter = singleWriter,
             SingleReader = singleReader
         });
@@ -128,7 +141,7 @@ static class ChannelExecution
             throw new ArgumentOutOfRangeException(nameof(degreeOfParallelism), "Degree of parallelism must be greater than 0.");
 
         var input = CreateChannel<IndexedItem<T>>(capacity, mode, singleWriter: true, singleReader: degreeOfParallelism == 1);
-        var output = Channel.CreateBounded<IndexedItem<T>>(new BoundedChannelOptions(Math.Max(GetEffectiveCapacity(capacity, mode), degreeOfParallelism))
+        var output = Channel.CreateBounded<IndexedItem<T>>(new BoundedChannelOptions(Math.Max(getEffectiveCapacity(capacity, mode), degreeOfParallelism))
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -211,18 +224,5 @@ static class ChannelExecution
         {
             await ScopeHelper.FinalizeScopeAsync(scope);
         }
-    }
-
-    static BoundedChannelFullMode GetFullMode(ChannelBackpressureMode mode)
-    {
-        return mode switch
-        {
-            ChannelBackpressureMode.Wait => BoundedChannelFullMode.Wait,
-            ChannelBackpressureMode.DropNewest => BoundedChannelFullMode.DropNewest,
-            ChannelBackpressureMode.DropOldest => BoundedChannelFullMode.DropOldest,
-            ChannelBackpressureMode.LatestOnly => BoundedChannelFullMode.DropOldest,
-            ChannelBackpressureMode.Fail => BoundedChannelFullMode.Wait,
-            _ => throw new ArgumentOutOfRangeException(nameof(mode))
-        };
     }
 }

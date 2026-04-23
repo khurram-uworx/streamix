@@ -25,7 +25,8 @@ public enum SinkCompletionMode
 /// </summary>
 public static class TerminalExtensions
 {
-    static IClock GetClock<T>(IStream<T> stream) => stream.Clock;
+    static IClock GetClock<T>(IStream<T> stream)
+        => stream.Clock;
 
     /// <summary>
     /// Determines whether the stream contains a specific element by using the default equality comparer.
@@ -70,10 +71,10 @@ public static class TerminalExtensions
     public static async Task<List<T>> ToListAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         var list = new List<T>();
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             list.Add(item);
-        }
+
         return list;
     }
 
@@ -98,9 +99,7 @@ public static class TerminalExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a hash set containing all items from the stream.</returns>
     public static Task<HashSet<T>> ToHashSetAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
-    {
-        return stream.ToHashSetAsync(null, cancellationToken);
-    }
+        => stream.ToHashSetAsync(null, cancellationToken);
 
     /// <summary>
     /// Collects all items from the stream into a <see cref="HashSet{T}"/> using a specified comparer.
@@ -113,10 +112,10 @@ public static class TerminalExtensions
     public static async Task<HashSet<T>> ToHashSetAsync<T>(this IStream<T> stream, IEqualityComparer<T>? comparer, CancellationToken cancellationToken = default)
     {
         var hashSet = new HashSet<T>(comparer);
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             hashSet.Add(item);
-        }
+
         return hashSet;
     }
 
@@ -157,13 +156,14 @@ public static class TerminalExtensions
     /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a dictionary with keys from the selector and values as stream items.</returns>
-    public static async Task<Dictionary<TKey, T>> ToDictionaryAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default) where TKey : notnull
+    public static async Task<Dictionary<TKey, T>> ToDictionaryAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer,
+        CancellationToken cancellationToken = default) where TKey : notnull
     {
         var dict = new Dictionary<TKey, T>(comparer);
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             dict.Add(keySelector(item), item);
-        }
+
         return dict;
     }
 
@@ -178,7 +178,8 @@ public static class TerminalExtensions
     /// <param name="valueSelector">A function to extract the value from each item.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a dictionary with selected keys and values.</returns>
-    public static Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, CancellationToken cancellationToken = default) where TKey : notnull
+    public static Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector,
+        CancellationToken cancellationToken = default) where TKey : notnull
     {
         return stream.ToDictionaryAsync(keySelector, valueSelector, null, cancellationToken);
     }
@@ -195,13 +196,14 @@ public static class TerminalExtensions
     /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a dictionary with selected keys and values.</returns>
-    public static async Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default) where TKey : notnull
+    public static async Task<Dictionary<TKey, TValue>> ToDictionaryAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector,
+        IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default) where TKey : notnull
     {
         var dict = new Dictionary<TKey, TValue>(comparer);
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             dict.Add(keySelector(item), valueSelector(item));
-        }
+
         return dict;
     }
 
@@ -215,9 +217,7 @@ public static class TerminalExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a lookup with keys from the selector and values as stream items.</returns>
     public static Task<ILookup<TKey, T>> ToLookupAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, CancellationToken cancellationToken = default)
-    {
-        return stream.ToLookupAsync(keySelector, x => x, null, cancellationToken);
-    }
+        => stream.ToLookupAsync(keySelector, x => x, null, cancellationToken);
 
     /// <summary>
     /// Collects all items from the stream into a <see cref="ILookup{TKey, T}"/> using a key selector and specified comparer.
@@ -229,10 +229,9 @@ public static class TerminalExtensions
     /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a lookup with keys from the selector and values as stream items.</returns>
-    public static Task<ILookup<TKey, T>> ToLookupAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default)
-    {
-        return stream.ToLookupAsync(keySelector, x => x, comparer, cancellationToken);
-    }
+    public static Task<ILookup<TKey, T>> ToLookupAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> keySelector, IEqualityComparer<TKey>? comparer,
+        CancellationToken cancellationToken = default)
+        => stream.ToLookupAsync(keySelector, x => x, comparer, cancellationToken);
 
     /// <summary>
     /// Collects all items from the stream into a <see cref="ILookup{TKey, TValue}"/> using key and value selectors.
@@ -245,10 +244,9 @@ public static class TerminalExtensions
     /// <param name="valueSelector">A function to extract the value from each item.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a lookup with selected keys and values.</returns>
-    public static Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, CancellationToken cancellationToken = default)
-    {
-        return stream.ToLookupAsync(keySelector, valueSelector, null, cancellationToken);
-    }
+    public static Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector,
+        CancellationToken cancellationToken = default)
+        => stream.ToLookupAsync(keySelector, valueSelector, null, cancellationToken);
 
     /// <summary>
     /// Collects all items from the stream into a <see cref="ILookup{TKey, TValue}"/> using key and value selectors and specified comparer.
@@ -262,7 +260,8 @@ public static class TerminalExtensions
     /// <param name="comparer">An <see cref="IEqualityComparer{TKey}"/> to compare keys.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns a lookup with selected keys and values.</returns>
-    public static async Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default)
+    public static async Task<ILookup<TKey, TValue>> ToLookupAsync<T, TKey, TValue>(this IStream<T> stream, Func<T, TKey> keySelector, Func<T, TValue> valueSelector,
+        IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken = default)
     {
         var list = await stream.ToListAsync(cancellationToken);
         return list.ToLookup(keySelector, valueSelector, comparer);
@@ -281,9 +280,8 @@ public static class TerminalExtensions
     public static async Task<T> FirstAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             return item;
-        }
+
         throw new InvalidOperationException("Sequence contains no elements.");
     }
 
@@ -299,10 +297,9 @@ public static class TerminalExtensions
     public static async Task<T> FirstAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
                 return item;
-        }
+
         throw new InvalidOperationException("Sequence contains no matching element.");
     }
 
@@ -316,9 +313,8 @@ public static class TerminalExtensions
     public static async Task<T?> FirstOrDefaultAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             return item;
-        }
+
         return default;
     }
 
@@ -333,10 +329,9 @@ public static class TerminalExtensions
     public static async Task<T?> FirstOrDefaultAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
                 return item;
-        }
+
         return default;
     }
 
@@ -406,9 +401,7 @@ public static class TerminalExtensions
         T? last = default;
 
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             last = item;
-        }
 
         return last;
     }
@@ -426,12 +419,8 @@ public static class TerminalExtensions
         T? last = default;
 
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
-            {
                 last = item;
-            }
-        }
 
         return last;
     }
@@ -446,10 +435,10 @@ public static class TerminalExtensions
     public static async Task<int> CountAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         int count = 0;
+
         await foreach (var _ in stream.WithCancellation(cancellationToken))
-        {
             count++;
-        }
+
         return count;
     }
 
@@ -464,11 +453,11 @@ public static class TerminalExtensions
     public static async Task<int> CountAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         int count = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
                 count++;
-        }
+
         return count;
     }
 
@@ -483,11 +472,11 @@ public static class TerminalExtensions
     public static async Task<int> CountAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
     {
         int count = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (await predicate(item))
                 count++;
-        }
+
         return count;
     }
 
@@ -502,10 +491,9 @@ public static class TerminalExtensions
     public static async Task<bool> AnyAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
                 return true;
-        }
+
         return false;
     }
 
@@ -520,10 +508,9 @@ public static class TerminalExtensions
     public static async Task<bool> AnyAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (await predicate(item))
                 return true;
-        }
+
         return false;
     }
 
@@ -538,10 +525,9 @@ public static class TerminalExtensions
     public static async Task<bool> AllAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (!predicate(item))
                 return false;
-        }
+
         return true;
     }
 
@@ -556,10 +542,9 @@ public static class TerminalExtensions
     public static async Task<bool> AllAsync<T>(this IStream<T> stream, Func<T, ValueTask<bool>> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (!await predicate(item))
                 return false;
-        }
+
         return true;
     }
 
@@ -573,9 +558,8 @@ public static class TerminalExtensions
     public static async Task<bool> AnyAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         await foreach (var _ in stream.WithCancellation(cancellationToken))
-        {
             return true;
-        }
+
         return false;
     }
 
@@ -601,9 +585,7 @@ public static class TerminalExtensions
                 hasValue = true;
             }
             else
-            {
                 accumulate = accumulator(accumulate!, item);
-            }
         }
 
         if (!hasValue)
@@ -622,14 +604,13 @@ public static class TerminalExtensions
     /// <param name="accumulator">An accumulator function.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns the aggregate value.</returns>
-    public static async Task<TAccumulate> AggregateAsync<T, TAccumulate>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator, CancellationToken cancellationToken = default)
+    public static async Task<TAccumulate> AggregateAsync<T, TAccumulate>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator,
+        CancellationToken cancellationToken = default)
     {
         TAccumulate accumulate = seed;
 
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             accumulate = accumulator(accumulate, item);
-        }
 
         return accumulate;
     }
@@ -646,14 +627,13 @@ public static class TerminalExtensions
     /// <param name="resultSelector">A function to transform the final accumulator value.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns the transformed aggregate value.</returns>
-    public static async Task<TResult> AggregateAsync<T, TAccumulate, TResult>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator, Func<TAccumulate, TResult> resultSelector, CancellationToken cancellationToken = default)
+    public static async Task<TResult> AggregateAsync<T, TAccumulate, TResult>(this IStream<T> stream, TAccumulate seed,
+        Func<TAccumulate, T, TAccumulate> accumulator, Func<TAccumulate, TResult> resultSelector, CancellationToken cancellationToken = default)
     {
         TAccumulate accumulate = seed;
 
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             accumulate = accumulator(accumulate, item);
-        }
 
         return resultSelector(accumulate);
     }
@@ -781,10 +761,10 @@ public static class TerminalExtensions
     public static async Task<int> SumAsync(this IStream<int> stream, CancellationToken cancellationToken = default)
     {
         int sum = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             sum += item;
-        }
+
         return sum;
     }
 
@@ -797,10 +777,10 @@ public static class TerminalExtensions
     public static async Task<long> SumAsync(this IStream<long> stream, CancellationToken cancellationToken = default)
     {
         long sum = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             sum += item;
-        }
+
         return sum;
     }
 
@@ -813,10 +793,10 @@ public static class TerminalExtensions
     public static async Task<decimal> SumAsync(this IStream<decimal> stream, CancellationToken cancellationToken = default)
     {
         decimal sum = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             sum += item;
-        }
+
         return sum;
     }
 
@@ -829,10 +809,10 @@ public static class TerminalExtensions
     public static async Task<double> SumAsync(this IStream<double> stream, CancellationToken cancellationToken = default)
     {
         double sum = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             sum += item;
-        }
+
         return sum;
     }
 
@@ -1038,10 +1018,12 @@ public static class TerminalExtensions
             throw new ArgumentOutOfRangeException(nameof(index));
 
         int current = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             if (current == index)
                 return item;
+
             current++;
         }
 
@@ -1066,6 +1048,7 @@ public static class TerminalExtensions
         {
             if (current == index)
                 return item;
+
             current++;
         }
 
@@ -1082,9 +1065,8 @@ public static class TerminalExtensions
     public static async Task<Option<T>> FirstOrNoneAsync<T>(this IStream<T> stream, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             return Option<T>.Some(item);
-        }
+
         return Option<T>.None;
     }
 
@@ -1099,10 +1081,9 @@ public static class TerminalExtensions
     public static async Task<Option<T>> FirstOrNoneAsync<T>(this IStream<T> stream, Func<T, bool> predicate, CancellationToken cancellationToken = default)
     {
         await foreach (var item in stream.WithCancellation(cancellationToken))
-        {
             if (predicate(item))
                 return Option<T>.Some(item);
-        }
+
         return Option<T>.None;
     }
 
@@ -1218,10 +1199,12 @@ public static class TerminalExtensions
             return Option<T>.None;
 
         int current = 0;
+
         await foreach (var item in stream.WithCancellation(cancellationToken))
         {
             if (current == index)
                 return Option<T>.Some(item);
+
             current++;
         }
 
@@ -1240,9 +1223,7 @@ public static class TerminalExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns the final accumulated value.</returns>
     public static Task<T> ReduceAsync<T>(this IStream<T> stream, Func<T, T, T> accumulator, CancellationToken cancellationToken = default)
-    {
-        return stream.AggregateAsync(accumulator, cancellationToken);
-    }
+        => stream.AggregateAsync(accumulator, cancellationToken);
 
     /// <summary>
     /// Applies an accumulator function over the stream with a seed and returns the final state only.
@@ -1255,10 +1236,9 @@ public static class TerminalExtensions
     /// <param name="accumulator">An accumulator function.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that returns the final accumulated state.</returns>
-    public static Task<TAccumulate> ScanLastAsync<T, TAccumulate>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator, CancellationToken cancellationToken = default)
-    {
-        return stream.AggregateAsync(seed, accumulator, cancellationToken);
-    }
+    public static Task<TAccumulate> ScanLastAsync<T, TAccumulate>(this IStream<T> stream, TAccumulate seed, Func<TAccumulate, T, TAccumulate> accumulator,
+        CancellationToken cancellationToken = default)
+        => stream.AggregateAsync(seed, accumulator, cancellationToken);
 
     /// <summary>
     /// Returns the element from the stream that has the maximum value according to a specified selector.
@@ -1271,9 +1251,7 @@ public static class TerminalExtensions
     /// <returns>A task that returns the element with the maximum key value.</returns>
     /// <exception cref="InvalidOperationException">The stream is empty.</exception>
     public static async Task<T> MaxByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
-    {
-        return await stream.MaxByAsync(selector, comparer: null, cancellationToken);
-    }
+        => await stream.MaxByAsync(selector, comparer: null, cancellationToken);
 
     /// <summary>
     /// Returns the element from the stream that has the maximum value according to a specified selector and comparer.
@@ -1321,9 +1299,7 @@ public static class TerminalExtensions
     /// <returns>A task that returns the element with the minimum key value.</returns>
     /// <exception cref="InvalidOperationException">The stream is empty.</exception>
     public static async Task<T> MinByAsync<T, TKey>(this IStream<T> stream, Func<T, TKey> selector, CancellationToken cancellationToken = default) where TKey : IComparable<TKey>
-    {
-        return await stream.MinByAsync(selector, comparer: null, cancellationToken);
-    }
+        => await stream.MinByAsync(selector, comparer: null, cancellationToken);
 
     /// <summary>
     /// Returns the element from the stream that has the minimum value according to a specified selector and comparer.
@@ -1382,9 +1358,8 @@ public static class TerminalExtensions
         var delayTask = clock.Delay(timeout, delayCts.Token).ContinueWith(t =>
         {
             if (t.IsCompletedSuccessfully)
-            {
                 timeoutCts.Cancel();
-            }
+
         }, TaskContinuationOptions.ExecuteSynchronously);
 
         try
@@ -1420,9 +1395,8 @@ public static class TerminalExtensions
         var delayTask = clock.Delay(timeout, delayCts.Token).ContinueWith(t =>
         {
             if (t.IsCompletedSuccessfully)
-            {
                 timeoutCts.Cancel();
-            }
+
         }, TaskContinuationOptions.ExecuteSynchronously);
 
         try
@@ -1436,6 +1410,7 @@ public static class TerminalExtensions
         finally
         {
             delayCts.Cancel();
+
             try { await delayTask; } catch { }
         }
     }
@@ -1459,17 +1434,14 @@ public static class TerminalExtensions
         var delayTask = clock.Delay(duration, delayCts.Token).ContinueWith(t =>
         {
             if (t.IsCompletedSuccessfully)
-            {
                 timeoutCts.Cancel();
-            }
+
         }, TaskContinuationOptions.ExecuteSynchronously);
 
         try
         {
             await foreach (var item in stream.WithCancellation(timeoutCts.Token))
-            {
                 list.Add(item);
-            }
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
@@ -1495,10 +1467,9 @@ public static class TerminalExtensions
     /// <param name="completionMode">Controls whether the sink is completed by this terminal.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all items have been written to the sink.</returns>
-    public static Task ToSinkAsync<T>(this IStream<T> stream, IAsyncSink<T> sink, SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink, CancellationToken cancellationToken = default)
-    {
-        return Implementations.SinkHelper.WriteSinkAsync(stream, sink, completionMode, cancellationToken);
-    }
+    public static Task ToSinkAsync<T>(this IStream<T> stream, IAsyncSink<T> sink, SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink,
+        CancellationToken cancellationToken = default)
+        => Implementations.SinkHelper.WriteSinkAsync(stream, sink, completionMode, cancellationToken);
 
     /// <summary>
     /// Terminal operation that writes all items of the stream to a delegate-backed sink.
@@ -1516,9 +1487,7 @@ public static class TerminalExtensions
         Func<Exception?, CancellationToken, ValueTask>? completeAsync = null,
         SinkCompletionMode completionMode = SinkCompletionMode.CompleteSink,
         CancellationToken cancellationToken = default)
-    {
-        return stream.ToSinkAsync(new DelegateAsyncSink<T>(writeAsync, completeAsync), completionMode, cancellationToken);
-    }
+        => stream.ToSinkAsync(new DelegateAsyncSink<T>(writeAsync, completeAsync), completionMode, cancellationToken);
 
     /// <summary>
     /// Terminal operation that writes all items of the stream to a new <see cref="ChannelReader{T}"/>.
@@ -1613,9 +1582,7 @@ public static class TerminalExtensions
     /// <param name="stream">The source stream.</param>
     /// <returns>The stream as an <see cref="IAsyncEnumerable{T}"/>.</returns>
     public static IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IStream<T> stream)
-    {
-        return stream;
-    }
+        => stream;
 
     // Consumption Control
 
@@ -1630,9 +1597,7 @@ public static class TerminalExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all elements have been processed.</returns>
     public static Task ForEachAsync<T>(this IStream<T> stream, Func<T, Task> action, int maxConcurrency, CancellationToken cancellationToken = default)
-    {
-        return stream.FlatMap(async x => { await action(x); return 0; }, maxConcurrency).DrainAsync(cancellationToken);
-    }
+        => stream.FlatMap(async x => { await action(x); return 0; }, maxConcurrency).DrainAsync(cancellationToken);
 
     /// <summary>
     /// Explicit version of <see cref="ForEachAsync{T}(IStream{T}, Func{T, Task}, int, CancellationToken)"/>.
@@ -1644,9 +1609,7 @@ public static class TerminalExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when all elements have been processed.</returns>
     public static Task ParallelForEachAsync<T>(this IStream<T> stream, int maxConcurrency, Func<T, Task> action, CancellationToken cancellationToken = default)
-    {
-        return stream.ForEachAsync(action, maxConcurrency, cancellationToken);
-    }
+        => stream.ForEachAsync(action, maxConcurrency, cancellationToken);
 
     // Subscription-style Terminals
 
@@ -1660,19 +1623,16 @@ public static class TerminalExtensions
     /// <param name="onComplete">The asynchronous action to execute when the stream completes successfully.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that represents the subscription lifecycle.</returns>
-    public static async Task SubscribeAsync<T>(this IStream<T> stream, Func<T, Task> onNext, Func<Exception, Task>? onError = null, Func<Task>? onComplete = null, CancellationToken cancellationToken = default)
+    public static async Task SubscribeAsync<T>(this IStream<T> stream, Func<T, Task> onNext, Func<Exception, Task>? onError = null, Func<Task>? onComplete = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             await foreach (var item in stream.WithCancellation(cancellationToken))
-            {
                 await onNext(item);
-            }
 
             if (onComplete != null)
-            {
                 await onComplete();
-            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1681,13 +1641,9 @@ public static class TerminalExtensions
         catch (Exception ex)
         {
             if (onError != null)
-            {
                 await onError(ex);
-            }
             else
-            {
                 throw;
-            }
         }
     }
 
@@ -1729,9 +1685,8 @@ public static class TerminalExtensions
         try
         {
             await foreach (var item in stream.WithCancellation(cancellationToken))
-            {
                 items.Add(item);
-            }
+
             completed = true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

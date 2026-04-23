@@ -31,9 +31,8 @@ public static class EfStream
         await foreach (var item in EntityFrameworkQueryableExtensions
             .AsAsyncEnumerable(efQuery)
             .WithCancellation(cancellationToken))
-        {
+
             yield return item;
-        }
     }
 
     /// <summary>
@@ -81,10 +80,7 @@ public static class EfStream
         ArgumentNullException.ThrowIfNull(dbContextFactory);
         ArgumentNullException.ThrowIfNull(clock);
 
-        return Stream.From(
-            executeBufferedQuery(query, dbContextFactory),
-            clock,
-            name);
+        return Stream.From(executeBufferedQuery(query, dbContextFactory), clock, name);
     }
 
     /// <summary>
@@ -132,9 +128,6 @@ public static class EfStream
         ArgumentNullException.ThrowIfNull(dbContextFactory);
         ArgumentNullException.ThrowIfNull(clock);
 
-        return Stream.From(
-            executeStreamedQuery(query, dbContextFactory),
-            clock,
-            name);
+        return Stream.From(executeStreamedQuery(query, dbContextFactory), clock, name);
     }
 }

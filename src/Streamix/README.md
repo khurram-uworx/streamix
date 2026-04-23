@@ -78,5 +78,5 @@ Use the repository docs for fuller signal semantics and examples.
 
 ## Status
 
-Streamix is still early-stage, but this package README is intended to describe the shipped core surface only.
+Streamix package README is intended to describe the shipped core surface only.
 Use the root repository README for the fuller product contract, roadmap, and release checklist.

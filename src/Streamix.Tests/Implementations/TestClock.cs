@@ -35,9 +35,7 @@ public sealed class TestClock : IClock
 
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (cancellationToken.CanBeCanceled)
-        {
             cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
-        }
 
         lock (delays)
         {

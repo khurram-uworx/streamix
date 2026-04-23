@@ -111,10 +111,8 @@ class SingleImplementation<T> : ISingle<T>
         }
 
         if (resumeSource != null)
-        {
             await foreach (var item in resumeSource.WithCancellation(ct))
                 yield return item;
-        }
     }
 
     async IAsyncEnumerable<T> runOn(TaskScheduler scheduler, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -126,13 +124,9 @@ class SingleImplementation<T> : ISingle<T>
             {
                 var hasNext = await Task.Factory.StartNew(() => enumerator.MoveNextAsync().AsTask(), cancellationToken, TaskCreationOptions.None, scheduler).Unwrap();
                 if (hasNext)
-                {
                     yield return enumerator.Current;
-                }
                 else
-                {
                     break;
-                }
             }
         }
         finally
@@ -195,9 +189,7 @@ class SingleImplementation<T> : ISingle<T>
                                 yield break;
                             }
                             else
-                            {
                                 yield break;
-                            }
                         }
                     }
 
@@ -206,15 +198,11 @@ class SingleImplementation<T> : ISingle<T>
                         // continue to retry logic below
                     }
                     else if (hasValue)
-                    {
                         yield break;
-                    }
                 }
             }
             else
-            {
                 failed = true;
-            }
 
             if (failed)
             {
@@ -229,9 +217,7 @@ class SingleImplementation<T> : ISingle<T>
                 {
                     var delay = backoffStrategy(attempts, lastException);
                     if (delay > TimeSpan.Zero)
-                    {
                         await clock.Delay(delay, cancellationToken);
-                    }
                 }
                 continue;
             }
@@ -370,9 +356,7 @@ class SingleImplementation<T> : ISingle<T>
         try
         {
             await foreach (var item in source.WithCancellation(ct))
-            {
                 yield return item;
-            }
         }
         finally
         {

@@ -28,9 +28,7 @@ static class SinkHelper
         try
         {
             await foreach (var item in source.WithCancellation(cancellationToken))
-            {
                 await sink.WriteAsync(item, cancellationToken);
-            }
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {

@@ -179,7 +179,9 @@ class StreamImplementation<T> : IStream<T>
         finally
         {
             emitter.Cancel();
+
             try { await producerTask; } catch { }
+
             emitter.Dispose();
         }
     }
@@ -212,19 +214,17 @@ class StreamImplementation<T> : IStream<T>
         try
         {
             while (await channel.Reader.WaitToReadAsync(cancellationToken))
-            {
                 while (channel.Reader.TryRead(out var item))
-                {
                     yield return item;
-                }
-            }
 
             await channel.Reader.Completion;
         }
         finally
         {
             emitter.Cancel();
+
             try { await producerTask; } catch { }
+
             emitter.Dispose();
         }
     }

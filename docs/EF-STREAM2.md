@@ -1,8 +1,8 @@
-# EF Stream
+# EF Stream Follow-Up
 
 ## Purpose
 
-This file is for future EF integration follow-up only.
+This file collects EF integration backlog items that have been pushed out of earlier release plans.
 
 Settled public contract and current guidance now live in:
 
@@ -10,6 +10,8 @@ Settled public contract and current guidance now live in:
 - `GETTING-STARTED.md`
 - `ARCHITECTURE.md`
 - `src/Streamix.Extensions/README.md`
+
+When this packet is prioritized for a release, the sections below describe a sensible implementation order and the main design questions to resolve. Items not taken for that release stay here as future plans.
 
 ## Future Follow-Up Candidates
 

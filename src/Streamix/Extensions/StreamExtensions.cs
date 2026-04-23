@@ -164,9 +164,7 @@ public static class StreamExtensions
             });
 
             await foreach (var task in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
-            {
                 yield return await task;
-            }
         }
         finally
         {
@@ -188,6 +186,7 @@ public static class StreamExtensions
             await foreach (var item in enumerable.WithCancellation(cancellationToken))
                 await foreach (var innerItem in selector(item).WithCancellation(cancellationToken))
                     yield return innerItem;
+
             yield break;
         }
 
@@ -243,9 +242,7 @@ public static class StreamExtensions
             });
 
             await foreach (var result in ScopeHelper.ReadAllSupervisedAsync(channel.Reader, scope, cancellationToken).ConfigureAwait(false))
-            {
                 yield return result;
-            }
         }
         finally
         {

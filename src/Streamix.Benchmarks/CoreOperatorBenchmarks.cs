@@ -5,8 +5,17 @@ namespace Streamix.Benchmarks;
 [MemoryDiagnoser]
 public class CoreOperatorBenchmarks
 {
-    private const int ItemCount = 1000;
-    private IStream<int> source = null!;
+    const int ItemCount = 1000;
+    IStream<int> source = null!;
+
+    async IAsyncEnumerable<int> GetItemsAsync()
+    {
+        for (int i = 0; i < ItemCount; i++)
+        {
+            yield return i;
+            await Task.Yield();
+        }
+    }
 
     [GlobalSetup]
     public void Setup()
@@ -20,15 +29,6 @@ public class CoreOperatorBenchmarks
         await foreach (var item in GetItemsAsync())
         {
             var _ = item * 2;
-        }
-    }
-
-    private async IAsyncEnumerable<int> GetItemsAsync()
-    {
-        for (int i = 0; i < ItemCount; i++)
-        {
-            yield return i;
-            await Task.Yield();
         }
     }
 

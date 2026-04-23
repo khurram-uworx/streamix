@@ -303,13 +303,9 @@ var stream = Stream.Create<int>(async emitter =>
 {
     await emitter.EmitAsync(1);
     if (someCondition)
-    {
         emitter.Fail(new Exception("Oops"));
-    }
     else
-    {
         emitter.Complete();
-    }
 });
 ```
 
@@ -407,9 +403,7 @@ var stream = Stream.Using(
     reader => Stream.Create<string>(async emitter =>
     {
         while (!reader.EndOfStream)
-        {
             await emitter.EmitAsync(await reader.ReadLineAsync());
-        }
     }));
 ```
 
@@ -608,7 +602,7 @@ app.MapGet("/prices", async (HttpResponse response, CancellationToken ct) =>
 [HttpGet("prices")]
 public IActionResult GetPrices()
 {
-    var priceStream = _priceService.GetPriceUpdates().Publish().RefCount();
+    var priceStream = priceService.GetPriceUpdates().Publish().RefCount();
     return new StreamResult<decimal>(priceStream);
 }
 ```
@@ -620,7 +614,7 @@ public async Task GetPricesWebSocket()
     if (HttpContext.WebSockets.IsWebSocketRequest)
     {
         using var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        var stream = _priceService.GetPriceUpdates();
+        var stream = priceService.GetPriceUpdates();
         await stream.ToWebSocketAsync(ws, HttpContext.RequestAborted);
     }
     else
@@ -634,7 +628,7 @@ public async Task GetPricesWebSocket()
 [HttpGet("orders")]
 public async Task GetOrders(int userId)
 {
-    var stream = _orderService.GetOrders(userId);
+    var stream = orderService.GetOrders(userId);
     await stream.ToJsonResponseAsync(HttpContext.Response, HttpContext.RequestAborted);
 }
 ```
@@ -687,7 +681,3 @@ var retried = stream
 - Keep API fluent and minimal
 - Focus on async-first idioms
 - Backpressure awareness is required for stream operators
-
-## License
-
-MIT

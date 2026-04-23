@@ -1,41 +1,6 @@
 namespace Streamix;
 
 /// <summary>
-/// Represents the result of executing a stream, including items, error, completion status, and duration.
-/// </summary>
-/// <typeparam name="T">The type of items in the stream.</typeparam>
-public sealed record StreamResult<T>(List<T> Items, Exception? Error, bool Completed, TimeSpan Duration);
-
-/// <summary>
-/// Represents the result of a single generation step.
-/// </summary>
-/// <typeparam name="TState">The type of the state.</typeparam>
-/// <typeparam name="T">The type of items in the stream.</typeparam>
-public readonly record struct GenerationResult<TState, T>(TState NextState, T? Value, bool HasValue, bool IsComplete)
-{
-    /// <summary>
-    /// Creates a result that emits a value and transitions to the next state.
-    /// </summary>
-    /// <param name="value">The value to emit.</param>
-    /// <param name="nextState">The next state for generation.</param>
-    /// <returns>A generation result that emits a value.</returns>
-    public static GenerationResult<TState, T> Emit(T value, TState nextState) => new(nextState, value, true, false);
-
-    /// <summary>
-    /// Creates a result that skips emission and transitions to the next state.
-    /// </summary>
-    /// <param name="nextState">The next state for generation.</param>
-    /// <returns>A generation result that skips emission.</returns>
-    public static GenerationResult<TState, T> Skip(TState nextState) => new(nextState, default, false, false);
-
-    /// <summary>
-    /// Creates a result that signals the end of the stream.
-    /// </summary>
-    /// <returns>A generation result that signals completion.</returns>
-    public static GenerationResult<TState, T> Complete() => new(default!, default, false, true);
-}
-
-/// <summary>
 /// Represents a value that may or may not be present.
 /// </summary>
 /// <typeparam name="T">The type of the value.</typeparam>
@@ -83,12 +48,45 @@ public readonly record struct Option<T>
 }
 
 /// <summary>
+/// Represents the result of executing a stream, including items, error, completion status, and duration.
+/// </summary>
+/// <typeparam name="T">The type of items in the stream.</typeparam>
+public sealed record StreamResult<T>(List<T> Items, Exception? Error, bool Completed, TimeSpan Duration);
+
+/// <summary>
+/// Represents the result of a single generation step.
+/// </summary>
+/// <typeparam name="TState">The type of the state.</typeparam>
+/// <typeparam name="T">The type of items in the stream.</typeparam>
+public readonly record struct GenerationResult<TState, T>(TState NextState, T? Value, bool HasValue, bool IsComplete)
+{
+    /// <summary>
+    /// Creates a result that emits a value and transitions to the next state.
+    /// </summary>
+    /// <param name="value">The value to emit.</param>
+    /// <param name="nextState">The next state for generation.</param>
+    /// <returns>A generation result that emits a value.</returns>
+    public static GenerationResult<TState, T> Emit(T value, TState nextState) => new(nextState, value, true, false);
+
+    /// <summary>
+    /// Creates a result that skips emission and transitions to the next state.
+    /// </summary>
+    /// <param name="nextState">The next state for generation.</param>
+    /// <returns>A generation result that skips emission.</returns>
+    public static GenerationResult<TState, T> Skip(TState nextState) => new(nextState, default, false, false);
+
+    /// <summary>
+    /// Creates a result that signals the end of the stream.
+    /// </summary>
+    /// <returns>A generation result that signals completion.</returns>
+    public static GenerationResult<TState, T> Complete() => new(default!, default, false, true);
+}
+
+/// <summary>
 /// Represents a value that has been timestamped.
 /// </summary>
 /// <typeparam name="T">The type of the value.</typeparam>
-public readonly record struct Timestamped<T>(
-    T Value,
-    DateTimeOffset Timestamp);
+public readonly record struct Timestamped<T>(T Value, DateTimeOffset Timestamp);
 
 /// <summary>
 /// Provides static methods for creating timestamped values.

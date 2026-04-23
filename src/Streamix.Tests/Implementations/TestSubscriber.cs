@@ -31,9 +31,8 @@ public class TestSubscriber<T>
         try
         {
             await foreach (var item in source.WithCancellation(ct))
-            {
                 items.Add(item);
-            }
+
             completed = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace Streamix.Implementations;
 
-internal sealed class StreamScope : IStreamScope, IAsyncDisposable
+sealed class StreamScope : IStreamScope, IAsyncDisposable
 {
     readonly CancellationToken externalToken;
     readonly CancellationTokenSource cts;
@@ -34,9 +34,7 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
     internal void RecordException(Exception ex)
     {
         if (ex is OperationCanceledException && cts.IsCancellationRequested)
-        {
             return;
-        }
 
         lock (errorSyncRoot)
         {
@@ -170,9 +168,7 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
         }
 
         if (externalToken.IsCancellationRequested)
-        {
             throw new TaskCanceledException(null, null, externalToken);
-        }
     }
 
     public async ValueTask DisposeAsync()
@@ -182,6 +178,7 @@ internal sealed class StreamScope : IStreamScope, IAsyncDisposable
             if (disposed) return;
             disposed = true;
         }
+
         await cts.CancelAsync();
         cts.Dispose();
     }

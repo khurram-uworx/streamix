@@ -3,7 +3,7 @@ using System.Threading.Channels;
 
 namespace Streamix.Implementations;
 
-internal static class ScopeHelper
+static class ScopeHelper
 {
     public static async IAsyncEnumerable<T> ReadAllSupervisedAsync<T>(
         ChannelReader<T> reader,
@@ -30,9 +30,7 @@ internal static class ScopeHelper
             if (!hasMore) break;
 
             while (reader.TryRead(out var item))
-            {
                 yield return item;
-            }
         }
     }
 

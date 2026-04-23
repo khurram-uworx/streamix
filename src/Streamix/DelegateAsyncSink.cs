@@ -14,16 +14,12 @@ class DelegateAsyncSink<T> : IAsyncSink<T>
     }
 
     public ValueTask WriteAsync(T item, CancellationToken cancellationToken = default)
-    {
-        return writeAsync(item, cancellationToken);
-    }
+        => writeAsync(item, cancellationToken);
 
     public ValueTask CompleteAsync(Exception? error = null, CancellationToken cancellationToken = default)
     {
         if (completeAsync is null)
-        {
             return ValueTask.CompletedTask;
-        }
 
         return completeAsync(error, cancellationToken);
     }

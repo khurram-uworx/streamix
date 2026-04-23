@@ -10,8 +10,7 @@ namespace Streamix;
 /// </summary>
 public static class LinqExtensions
 {
-    static async IAsyncEnumerable<TResult> selectManyAwaitConcurrent<T, TResult>(
-        IStream<T> source,
+    static async IAsyncEnumerable<TResult> selectManyAwaitConcurrent<T, TResult>(IStream<T> source,
         Func<T, ValueTask<IStream<TResult>>> selector,
         int maxConcurrency,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -167,7 +166,8 @@ public static class LinqExtensions
         return source.MapAwait(selector);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// </summary>
     public static IStream<TResult> SelectMany<T, TResult>(this IStream<T> source, Func<T, ISingle<TResult>> selector, int maxConcurrency = int.MaxValue)
         => source.FlatMap(selector, maxConcurrency);
 
@@ -187,25 +187,6 @@ public static class LinqExtensions
         => source.FlatMap(selector, maxConcurrency);
 
     /// <summary>
-    /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result concurrently (unordered).
-    /// Use fluent operators such as <see cref="StreamExtensions.ConcatMap{T, TResult}(IStream{T}, Func{T, IStream{TResult}})"/> or <see cref="StreamExtensions.FlatMapOrdered{T, TResult}(IStream{T}, Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
-    /// </summary>
-    public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector)
-    {
-        return Streamix.Stream.From(selectManyAwaitConcurrent(source, selector, int.MaxValue));
-    }
-
-    /// <summary>
-    /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result with concurrency support (unordered).
-    /// Use fluent operators such as <see cref="StreamExtensions.ConcatMap{T, TResult}(IStream{T}, Func{T, IStream{TResult}})"/> or <see cref="StreamExtensions.FlatMapOrdered{T, TResult}(IStream{T}, Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
-    /// </summary>
-    public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency)
-    {
-        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
-        return Streamix.Stream.From(selectManyAwaitConcurrent(source, selector, maxConcurrency));
-    }
-
-    /// <summary>
     /// Projects each element of a stream to an <see cref="ISingle{TResult}"/> and flattens the resulting streams into one stream (unordered concurrent).
     /// </summary>
     public static IStream<TResult> SelectMany<T, TResult>(this IStream<T> source, Func<T, ISingle<TResult>> selector)
@@ -222,4 +203,22 @@ public static class LinqExtensions
     /// </summary>
     public static IStream<TResult> SelectMany<T, TResult>(this IStream<T> source, Func<T, Task<TResult>> selector, int maxConcurrency)
         => source.FlatMap(selector, maxConcurrency);
+
+    /// <summary>
+    /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result concurrently (unordered).
+    /// Use fluent operators such as <see cref="StreamExtensions.ConcatMap{T, TResult}(IStream{T}, Func{T, IStream{TResult}})"/> or <see cref="StreamExtensions.FlatMapOrdered{T, TResult}(IStream{T}, Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
+    /// </summary>
+    public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector)
+        => Stream.From(selectManyAwaitConcurrent(source, selector, int.MaxValue));
+
+    /// <summary>
+    /// Projects each element of a stream using an asynchronous selector that returns an <see cref="IStream{TResult}"/>, and flattens the result with concurrency support (unordered).
+    /// Use fluent operators such as <see cref="StreamExtensions.ConcatMap{T, TResult}(IStream{T}, Func{T, IStream{TResult}})"/> or <see cref="StreamExtensions.FlatMapOrdered{T, TResult}(IStream{T}, Func{T, IStream{TResult}}, int, int)"/> when ordered or sequential flattening is required.
+    /// </summary>
+    public static IStream<TResult> SelectManyAsync<T, TResult>(this IStream<T> source, Func<T, ValueTask<IStream<TResult>>> selector, int maxConcurrency)
+    {
+        if (maxConcurrency <= 0) throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be greater than 0.");
+        return Stream.From(selectManyAwaitConcurrent(source, selector, maxConcurrency));
+    }
+
 }
