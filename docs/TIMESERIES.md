@@ -83,6 +83,8 @@ The remaining work is future enhancement planning in four areas:
 3. Task 3: design and implement session windows if real scenarios justify them
 4. Task 4: evaluate time-based joins as a separate feature area
 5. Task 5: prioritize additional time-based operators based on concrete usage needs
+6. Task 6: implement BufferByTime
+7. Task 7: implement Sample
 
 ## Coordination Notes
 
@@ -396,7 +398,7 @@ Determine whether the immediate need is:
 - `ARCHITECTURE.md`
 - `WORK.md`
 
-## Task 5: Prioritize Additional Time-Based Operators
+## ✅ Task 5: Prioritize Additional Time-Based Operators
 
 ### Priority
 
@@ -432,11 +434,80 @@ The review mentions operators like `BufferByTime` and `Sample`, but they should 
 - each shortlisted operator has a short semantic description
 - low-value or ambiguous operators are explicitly deferred
 
+### 🎯 Task 5 decision
+
+Task 5 is complete. Additional time-based operators have been prioritized based on common reactive stream patterns and user value.
+
+### Prioritized operators
+
+- **BufferByTime** (High): Groups items into `IList<T>` based on fixed time intervals. Essential for batching items over time for efficient processing or sink writes.
+- **Sample** (High): Emits the latest item from each time interval. Critical for rate-limiting and observing the latest state in a high-frequency stream.
+- **Debounce** (Medium): Emits an item only after a specified period of inactivity. Important for UI interactions and event suppression; deferred to a later planning cycle.
+
 ### Files likely involved
 
 - `docs/TIMESERIES.md`
 - `WORK.md`
 - `README.md`
+
+## Task 6: Implement BufferByTime
+
+### Priority
+
+High
+
+### Goal
+
+Implement the `BufferByTime` operator to group items into lists based on a time interval.
+
+### Scope
+
+- Implement `BufferByTime(TimeSpan interval, int? maxCount = null)` in `src/Streamix/Extensions/StreamExtensions.cs`.
+- Use `IClock` for testable timing.
+- Ensure proper cancellation and backpressure support.
+- Add unit tests covering various interval and item arrival scenarios.
+
+### Acceptance criteria
+
+- `BufferByTime` correctly batches items into lists.
+- A buffer is emitted when the time interval elapses or when `maxCount` is reached (if provided).
+- The operator handles source completion by flushing the final partial buffer.
+- Cancellation stops the timer and enumeration immediately.
+
+### Files likely involved
+
+- `src/Streamix/Extensions/StreamExtensions.cs`
+- `src/Streamix.Tests/Extensions/TimeBasedOperatorTests.cs`
+
+## Task 7: Implement Sample
+
+### Priority
+
+High
+
+### Goal
+
+Implement the `Sample` operator to emit the latest item within a periodic time interval.
+
+### Scope
+
+- Implement `Sample(TimeSpan interval)` in `src/Streamix/Extensions/StreamExtensions.cs`.
+- Use `IClock` for testable timing.
+- If no items arrive during an interval, nothing is emitted for that interval.
+- Ensure proper cancellation and backpressure support.
+- Add unit tests covering regular and sparse item arrival.
+
+### Acceptance criteria
+
+- `Sample` emits the most recent item at each interval boundary.
+- If the source is faster than the sampling interval, only the latest item is kept.
+- If the source is slower, some intervals may emit nothing.
+- The operator handles source completion and cancellation correctly.
+
+### Files likely involved
+
+- `src/Streamix/Extensions/StreamExtensions.cs`
+- `src/Streamix.Tests/Extensions/TimeBasedOperatorTests.cs`
 
 ## Additional Tasks
 
@@ -457,6 +528,8 @@ Recommended pattern for future time-series follow-up:
 
 - Task 2
 - Task 3
+- Task 6
+- Task 7
 
 ### Batch C: backlog planning
 
