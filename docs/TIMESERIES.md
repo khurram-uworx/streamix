@@ -93,7 +93,7 @@ The remaining work is future enhancement planning in four areas:
 - Task 5 can run in parallel with later planning work once the team decides which operator is worth adding next.
 - Shared files likely to create merge conflicts are `README.md`, `ARCHITECTURE.md`, and time-series-related test files.
 
-## Task 1: Define Watermark And Late-Event Semantics
+## ✅ Task 1: Define Watermark And Late-Event Semantics
 
 ### Priority
 
@@ -140,13 +140,108 @@ Decide the product semantics for:
 - the design states what happens to late events and when windows are considered complete
 - the design is narrow enough to implement and test without guesswork
 
+### 🎯 Task 1 decision
+
+Task 1 is now settled with a narrow bounded-out-of-orderness model for future watermark-aware event-time operators.
+
+The intent is to make Task 2 implementation work mechanical rather than interpretive.
+
+### Canonical semantic model
+
+- The existing `WindowByTime` contract remains unchanged and remains suitable for already ordered event-time input.
+- Watermark-aware behavior must be introduced as an explicit new operator or explicit opt-in mode. It must not silently change the behavior of the current `WindowByTime`.
+- A watermark is an event-time cutoff, not wall-clock time.
+- The watermark is monotonic and never moves backwards.
+- For the initial design, the watermark is derived from observed events rather than injected as a separate control stream.
+- The derived watermark is:
+  `watermark = maxObservedEventTimestamp - outOfOrderness`
+- `outOfOrderness` is a non-negative duration that defines how much reordering the operator tolerates before an event is considered late.
+- If `outOfOrderness = TimeSpan.Zero`, the operator expects strictly non-decreasing event timestamps.
+- Watermark progression happens only when a new event is observed or when upstream completes. The initial design does not include idle-source heuristics or processing-time timers.
+
+### Event classification
+
+- An event is on time if `event.Timestamp > currentWatermark` at the moment the operator receives it.
+- An event is late if `event.Timestamp <= currentWatermark` at the moment the operator receives it.
+- Equality is intentionally late:
+  if the watermark has reached `2025-01-01T00:05:00Z`, an event with timestamp `2025-01-01T00:05:00Z` is late.
+- Late-ness is determined on arrival. Once an event has been admitted to a window, later watermark advancement does not retroactively invalidate it.
+
+### Window membership and completion
+
+- Window membership remains based on event time and existing boundary rules.
+- Tumbling and sliding windows continue to use half-open intervals:
+  `[windowStart, windowEnd)`
+- An admitted event may belong only to windows whose event-time interval contains its timestamp.
+- A window becomes complete when `watermark >= windowEnd`.
+- Once complete, a window is final:
+  it emits no more items, is not reopened, and is not revised.
+- On upstream completion, all remaining open windows are completed immediately, equivalent to advancing the watermark to positive infinity for finalization purposes.
+
+### Late-event policy for the initial contract
+
+- The initial watermark-aware contract does not support allowed lateness.
+- The initial watermark-aware contract does not support retractions, corrections, or re-opening closed windows.
+- A late event is dropped from the main windowed output.
+- A late event must not be inserted into any already completed window.
+- A late event must not create a new window by itself.
+- The initial contract does not require a side output for late events.
+- If the library later adds explicit late-event routing, that must be a separate additive API and must not change the drop behavior of the initial contract unless the caller opts in explicitly.
+
+### Relationship to current implementation
+
+- The current `WindowByTime` implementation closes windows based on observed event timestamps and source completion, not on a formal watermark.
+- The current implementation assumes the input stream is already ordered enough for its boundary logic to be meaningful.
+- Task 2 must preserve the current implementation for callers who do not opt into watermark-aware behavior.
+- Watermark-aware behavior is therefore an additive event-time mode, not a reinterpretation of existing tests.
+
+### Required downstream visibility rules
+
+- Downstream consumers observe each window exactly once.
+- Downstream consumers observe only final window contents.
+- Downstream consumers do not observe partial completion signals followed by later corrections.
+- Downstream consumers do not observe dropped late events in the main output.
+- If diagnostics are added later, they are informational and separate from the main data path.
+
+### Explicit non-goals for the first implementation
+
+- no configurable allowed-lateness period after watermark completion
+- no separate watermark records in the public data stream
+- no processing-time fallback for idle partitions or idle sources
+- no retraction/update model for already emitted windows
+- no automatic side channel for late events
+- no implicit behavior change to `MapWithTimestamp` or `WindowByTime`
+
+### Mechanical rules for Task 2
+
+Coding agents implementing Task 2 should be able to apply the following rules directly:
+
+1. Track `maxObservedEventTimestamp`.
+2. Derive `currentWatermark = maxObservedEventTimestamp - outOfOrderness`.
+3. Before admitting an event, classify it as late when `event.Timestamp <= currentWatermark`.
+4. Drop late events from the main output.
+5. Admit on-time events to all matching windows under the existing half-open interval rules.
+6. After watermark advancement, complete every open window where `windowEnd <= currentWatermark`.
+7. Never reopen or mutate a completed window.
+8. When upstream completes, complete every remaining open window.
+
+### Test matrix implied by this contract
+
+- in-order input with `outOfOrderness = 0`
+- bounded out-of-order input that still arrives before the watermark cutoff
+- event exactly at the watermark boundary and therefore late
+- event earlier than the watermark and therefore dropped
+- windows that remain open until watermark advancement
+- final upstream completion that flushes remaining windows
+- cancellation and backpressure behavior unchanged relative to the existing operator model
+
 ### Files likely involved
 
 - `docs/TIMESERIES.md`
 - `ARCHITECTURE.md`
 - `README.md`
 
-## Task 2: Implement Watermark-Aware Event-Time Behavior
+## ✅ Task 2: Implement Watermark-Aware Event-Time Behavior
 
 ### Priority
 
