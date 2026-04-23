@@ -1,3 +1,4 @@
+using Streamix.Implementations;
 using System.Threading.Channels;
 
 namespace Streamix;
@@ -7,6 +8,19 @@ namespace Streamix;
 /// </summary>
 public static class TimeseriesExtensions
 {
+    class SessionState<T>
+    {
+        public long MinTicks { get; set; }
+        public long MaxTicks { get; set; }
+        public List<Timestamped<T>> Items { get; } = new();
+
+        public SessionState(long min, long max)
+        {
+            MinTicks = min;
+            MaxTicks = max;
+        }
+    }
+
     /// <summary>
     /// Projects each element of a stream into a <see cref="Timestamped{T}"/> using the specified timestamp selector.
     /// </summary>
@@ -410,16 +424,197 @@ public static class TimeseriesExtensions
         });
     }
 
-    private class SessionState<T>
+    /// <summary>
+    /// Groups elements of a stream into lists based on a time interval.
+    /// </summary>
+    /// <param name="source">The stream</param>
+    /// <param name="interval">The time interval to buffer items.</param>
+    /// <param name="maxCount">The maximum number of items per buffer.</param>
+    /// <returns>An <see cref="IStream{T}"/> of <see cref="IList{T}"/>.</returns>
+    public static IStream<IList<T>> BufferByTime<T>(this IStream<T> source, TimeSpan interval, int? maxCount = null)
     {
-        public long MinTicks { get; set; }
-        public long MaxTicks { get; set; }
-        public List<Timestamped<T>> Items { get; } = new();
+        if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval), "Interval must be greater than 0.");
+        if (maxCount.HasValue && maxCount.Value <= 0) throw new ArgumentOutOfRangeException(nameof(maxCount), "Max count must be greater than 0.");
 
-        public SessionState(long min, long max)
+        return Stream.Create<IList<T>>(async (emitter, ct) =>
         {
-            MinTicks = min;
-            MaxTicks = max;
-        }
+            var clock = source.Clock;
+            var channel = Channel.CreateUnbounded<object?>();
+            var tick = new object();
+
+            using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var scope = new StreamScope(internalCts.Token);
+            try
+            {
+                // Timer
+                scope.Run(async innerCt =>
+                {
+                    try
+                    {
+                        while (!innerCt.IsCancellationRequested)
+                        {
+                            await clock.Delay(interval, innerCt).ConfigureAwait(false);
+                            channel.Writer.TryWrite(tick);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
+                // Source
+                scope.Run(async innerCt =>
+                {
+                    try
+                    {
+                        await foreach (var item in source.WithCancellation(innerCt).ConfigureAwait(false))
+                        {
+                            channel.Writer.TryWrite(item);
+                        }
+                    }
+                    finally
+                    {
+                        channel.Writer.TryComplete();
+                    }
+                });
+
+                var buffer = new List<T>(maxCount ?? 16);
+                try
+                {
+                    await foreach (var itemOrTick in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                    {
+                        if (ReferenceEquals(itemOrTick, tick))
+                        {
+                            if (buffer.Count > 0)
+                            {
+                                await emitter.EmitAsync(buffer).ConfigureAwait(false);
+                                buffer = new List<T>(maxCount ?? 16);
+                            }
+                        }
+                        else
+                        {
+                            buffer.Add((T)itemOrTick!);
+                            if (maxCount.HasValue && buffer.Count >= maxCount.Value)
+                            {
+                                await emitter.EmitAsync(buffer).ConfigureAwait(false);
+                                buffer = new List<T>(maxCount ?? 16);
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+                catch (Exception ex)
+                {
+                    emitter.Fail(ex);
+                }
+                finally
+                {
+                    internalCts.Cancel();
+                    if (buffer.Count > 0 && !ct.IsCancellationRequested)
+                    {
+                        try { await emitter.EmitAsync(buffer).ConfigureAwait(false); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
+                await scope.DisposeAsync().ConfigureAwait(false);
+                emitter.Complete();
+            }
+        }).Named(source.Name ?? "");
+    }
+
+    /// <summary>
+    /// Emits the latest item within each periodic time interval.
+    /// </summary>
+    /// <param name="source">The stream</param>
+    /// <param name="interval">The sampling interval.</param>
+    /// <returns>A sampled <see cref="IStream{T}"/>.</returns>
+    public static IStream<T> Sample<T>(this IStream<T> source, TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval), "Interval must be greater than 0.");
+
+        return Stream.Create<T>(async (emitter, ct) =>
+        {
+            var clock = source.Clock;
+            var channel = Channel.CreateUnbounded<object?>();
+            var tick = new object();
+
+            using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var scope = new StreamScope(internalCts.Token);
+            try
+            {
+                // Timer
+                scope.Run(async innerCt =>
+                {
+                    try
+                    {
+                        while (!innerCt.IsCancellationRequested)
+                        {
+                            await clock.Delay(interval, innerCt).ConfigureAwait(false);
+                            channel.Writer.TryWrite(tick);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+
+                // Source
+                scope.Run(async innerCt =>
+                {
+                    try
+                    {
+                        await foreach (var item in source.WithCancellation(innerCt).ConfigureAwait(false))
+                        {
+                            channel.Writer.TryWrite(item);
+                        }
+                    }
+                    finally
+                    {
+                        channel.Writer.TryComplete();
+                    }
+                });
+
+                T? latestItem = default;
+                bool hasItem = false;
+                try
+                {
+                    await foreach (var itemOrTick in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                    {
+                        if (ReferenceEquals(itemOrTick, tick))
+                        {
+                            if (hasItem)
+                            {
+                                await emitter.EmitAsync(latestItem!).ConfigureAwait(false);
+                                hasItem = false;
+                                latestItem = default;
+                            }
+                        }
+                        else
+                        {
+                            latestItem = (T)itemOrTick!;
+                            hasItem = true;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+                catch (Exception ex)
+                {
+                    emitter.Fail(ex);
+                }
+                finally
+                {
+                    internalCts.Cancel();
+                    if (hasItem && !ct.IsCancellationRequested)
+                    {
+                        try { await emitter.EmitAsync(latestItem!).ConfigureAwait(false); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                await ScopeHelper.FinalizeScopeAsync(scope).ConfigureAwait(false);
+                await scope.DisposeAsync().ConfigureAwait(false);
+                emitter.Complete();
+            }
+        }).Named(source.Name ?? "");
     }
 }

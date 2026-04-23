@@ -8,59 +8,15 @@ public class TimeBasedOperatorTests
 {
     class ManualAsyncEnumerable<T> : IAsyncEnumerable<T>
     {
-        TaskCompletionSource<bool> nextTcs = new();
-        readonly Queue<T> queue = new();
-        bool completed;
-        readonly IClock clock;
+        private readonly System.Threading.Channels.Channel<T> _channel = System.Threading.Channels.Channel.CreateUnbounded<T>();
 
-        public ManualAsyncEnumerable(IClock clock) => this.clock = clock;
+        public ManualAsyncEnumerable(IClock clock) { }
 
-        public void Push(T item)
-        {
-            lock (queue)
-            {
-                queue.Enqueue(item);
-            }
-            nextTcs.TrySetResult(true);
-        }
+        public void Push(T item) => _channel.Writer.TryWrite(item);
+        public void Complete() => _channel.Writer.TryComplete();
 
-        public void Complete()
-        {
-            completed = true;
-            nextTcs.TrySetResult(false);
-        }
-
-        public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-        {
-            while (true)
-            {
-                await nextTcs.Task;
-                T item = default!;
-                bool hasItem = false;
-
-                lock (queue)
-                {
-                    if (queue.Count > 0)
-                    {
-                        item = queue.Dequeue();
-                        hasItem = true;
-                    }
-                }
-
-                if (hasItem)
-                {
-                    yield return item;
-                }
-
-                if (completed && queue.Count == 0) yield break;
-
-                // Reset the TCS for the next iteration
-                nextTcs = new TaskCompletionSource<bool>();
-
-                // Note: This manual implementation is simplified.
-                await Task.Delay(1, cancellationToken); // yield to allow next push
-            }
-        }
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+            => _channel.Reader.ReadAllAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
     }
 
     [Test]
@@ -624,5 +580,151 @@ public class TimeBasedOperatorTests
         var subscriber = await subscribeTask;
         subscriber.AssertValueCount(0);
         subscriber.AssertNotComplete();
+    }
+
+    [Test]
+    public async Task BufferByTime_ShouldGroupItemsByInterval()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var buffered = Stream.From<int>(source, clock).BufferByTime(TimeSpan.FromSeconds(1));
+
+        var subscriber = new TestSubscriber<IList<int>>();
+        var task = Task.Run(() => subscriber.RunAsync(buffered, default));
+
+        // 1. Push items
+        source.Push(1);
+        source.Push(2);
+        await Task.Delay(100); // Allow items to propagate to the operator
+
+        // 2. Advance clock to trigger buffer emission
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 500 && subscriber.Items.Count < 1; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(1));
+        Assert.That(subscriber.Items[0], Is.EquivalentTo(new[] { 1, 2 }));
+
+        // 3. Push more items and advance again
+        source.Push(3);
+        await Task.Delay(100); // Allow item to propagate
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 500 && subscriber.Items.Count < 2; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(2));
+        Assert.That(subscriber.Items[1], Is.EquivalentTo(new[] { 3 }));
+
+        source.Complete();
+        await task;
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task BufferByTime_ShouldRespectMaxCount()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var buffered = Stream.From<int>(source, clock).BufferByTime(TimeSpan.FromSeconds(1), maxCount: 2);
+
+        var subscriber = new TestSubscriber<IList<int>>();
+        var task = Task.Run(() => subscriber.RunAsync(buffered, default));
+
+        // 1. Push 2 items (maxCount reached)
+        source.Push(1);
+        source.Push(2);
+        for (int i = 0; i < 500 && subscriber.Items.Count < 1; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(1));
+        Assert.That(subscriber.Items[0], Is.EquivalentTo(new[] { 1, 2 }));
+
+        // 2. Push 1 item and advance clock
+        source.Push(3);
+        await Task.Delay(100); // Allow item to propagate
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 500 && subscriber.Items.Count < 2; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(2));
+        Assert.That(subscriber.Items[1], Is.EquivalentTo(new[] { 3 }));
+
+        source.Complete();
+        await task;
+    }
+
+    [Test]
+    public async Task BufferByTime_ShouldFlushOnCompletion()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var buffered = Stream.From<int>(source, clock).BufferByTime(TimeSpan.FromSeconds(1));
+
+        var subscriber = new TestSubscriber<IList<int>>();
+        var task = Task.Run(() => subscriber.RunAsync(buffered, default));
+
+        source.Push(1);
+        source.Complete();
+        await task;
+
+        Assert.That(subscriber.Items, Has.Count.EqualTo(1));
+        Assert.That(subscriber.Items[0], Is.EquivalentTo(new[] { 1 }));
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Sample_ShouldEmitLatestItemInInterval()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var sampled = Stream.From<int>(source, clock).Sample(TimeSpan.FromSeconds(1));
+
+        var subscriber = new TestSubscriber<int>();
+        var task = Task.Run(() => subscriber.RunAsync(sampled, default));
+
+        // 1. Push multiple items in one interval
+        source.Push(1);
+        source.Push(2);
+        source.Push(3);
+        await Task.Delay(100); // Allow items to propagate
+
+        // 2. Advance clock
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 500 && subscriber.Items.Count < 1; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(1));
+        Assert.That(subscriber.Items[0], Is.EqualTo(3));
+
+        // 3. Interval with no items
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        await Task.Delay(100);
+        Assert.That(subscriber.Items, Has.Count.EqualTo(1));
+
+        // 4. Another interval
+        source.Push(4);
+        await Task.Delay(100); // Allow item to propagate
+        await clock.WaitForDelay(1, TimeSpan.FromSeconds(2));
+        clock.AdvanceBy(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 500 && subscriber.Items.Count < 2; i++) await Task.Delay(10);
+        Assert.That(subscriber.Items, Has.Count.AtLeast(2));
+        Assert.That(subscriber.Items[1], Is.EqualTo(4));
+
+        source.Complete();
+        await task;
+        subscriber.AssertComplete();
+    }
+
+    [Test]
+    public async Task Sample_ShouldEmitFinalItemOnCompletion()
+    {
+        var clock = new TestClock();
+        var source = new ManualAsyncEnumerable<int>(clock);
+        var sampled = Stream.From<int>(source, clock).Sample(TimeSpan.FromSeconds(1));
+
+        var subscriber = new TestSubscriber<int>();
+        var task = Task.Run(() => subscriber.RunAsync(sampled, default));
+
+        source.Push(1);
+        source.Complete();
+        await task;
+
+        Assert.That(subscriber.Items, Is.EquivalentTo(new[] { 1 }));
+        subscriber.AssertComplete();
     }
 }

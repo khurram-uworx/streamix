@@ -78,13 +78,13 @@ The remaining work is future enhancement planning in four areas:
 
 ## Suggested Execution Order
 
-1. Task 1: define the semantic model for watermarks and late events
-2. Task 2: implement watermark-aware or late-event behavior only after the semantic contract is settled
-3. Task 3: design and implement session windows if real scenarios justify them
+1. ✅ Task 1: define the semantic model for watermarks and late events
+2. ✅ Task 2: implement watermark-aware or late-event behavior only after the semantic contract is settled
+3. ✅ Task 3: design and implement session windows if real scenarios justify them
 4. Task 4: evaluate time-based joins as a separate feature area
-5. Task 5: prioritize additional time-based operators based on concrete usage needs
-6. Task 6: implement BufferByTime
-7. Task 7: implement Sample
+5. ✅ Task 5: prioritize additional time-based operators based on concrete usage needs
+6. ✅ Task 6: implement BufferByTime
+7. ✅ Task 7: implement Sample
 
 ## Coordination Notes
 
@@ -450,7 +450,7 @@ Task 5 is complete. Additional time-based operators have been prioritized based 
 - `WORK.md`
 - `README.md`
 
-## Task 6: Implement BufferByTime
+## ✅ Task 6: Implement BufferByTime
 
 ### Priority
 
@@ -479,7 +479,7 @@ Implement the `BufferByTime` operator to group items into lists based on a time 
 - `src/Streamix/Extensions/StreamExtensions.cs`
 - `src/Streamix.Tests/Extensions/TimeBasedOperatorTests.cs`
 
-## Task 7: Implement Sample
+## ✅ Task 7: Implement Sample
 
 ### Priority
 
